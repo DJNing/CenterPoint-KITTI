@@ -342,7 +342,9 @@ class KittiDataset(DatasetTemplate):
             single_pred_dict = generate_single_sample_dict(index, box_dict)
             single_pred_dict['frame_id'] = frame_id
             annos.append(single_pred_dict)
-
+            # print('=================================')
+            # print(output_path)
+            # print('=================================')
             if output_path is not None:
                 cur_det_file = output_path / ('%s.txt' % frame_id)
                 with open(cur_det_file, 'w') as f:

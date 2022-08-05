@@ -26,9 +26,15 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     result_dir.mkdir(parents=True, exist_ok=True)
 
     final_output_dir = result_dir / 'final_result' / 'data'
+    # import ipdb
+    # ipdb.set_trace()
+    # print('=================================')
+    # print('save to file: %s' % save_to_file)
+    # print('=================================')
     if save_to_file:
         final_output_dir.mkdir(parents=True, exist_ok=True)
-
+    # import ipdb
+    # ipdb.set_trace()
     best_model_output_dir = result_dir / 'best_eval'
     if save_best_eval:
         best_model_output_dir.mkdir(parents=True, exist_ok=True)

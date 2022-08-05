@@ -80,6 +80,31 @@ class _PointnetSAModuleBase(nn.Module):
             new_features_list.append(new_features)
 
         return new_xyz, torch.cat(new_features_list, dim=1)
+class PoolingWeight(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # shape of weights [B, 1, Npoints, Nsamples]
+        # created during inference, save gradient only
+        self.weights = None
+        self.device = None
+        pass
+
+    def init_weights(self, features):
+        B, _, N, ns = features.shape
+        self.weights = torch.ones([B, 1, N, ns])
+        self.weights.to(features.device)
+        self.device = features.device
+        self.weights.requires_grad = True
+    
+    def reset_weights(self):
+        self.weights.fill_(1)
+
+    def forward(self, x):
+        '''
+        @param: x: input features 
+        '''
+        return self.weights * x
+        
 
 
 class PointnetSAModuleMSG(_PointnetSAModuleBase):
@@ -357,6 +382,7 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                  reverse=False,
                  pool_method='max_pool',
                  sample_idx=False,
+                 use_pooling_weights=False,
                  aggregation_mlp: List[int],
                  confidence_mlp: List[int],
                  euclidean_mask: False,
@@ -394,7 +420,12 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         # counter for naming saved features files
         self.saving_cnt = 0
         # ===========================================
-
+        # initialize a module to get weights
+        if use_pooling_weights: 
+            self.pool_weights = PoolingWeight()
+        else:
+            self.pool_weights = None
+        # ===========================================
         for i in range(len(radii)):
             radius = radii[i]
             nsample = nsamples[i]
@@ -506,7 +537,7 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         self.saving_cnt += 1
 
     def forward(self, xyz: torch.Tensor, features: torch.Tensor = None, cls_features: torch.Tensor = None, \
-        new_xyz=None, ctr_xyz=None, save_features_dir=None, frame_id=None):
+        new_xyz=None, ctr_xyz=None, save_features_dir=None, frame_id=None, pooling_weights=None):
         """
         :param xyz: (B, N, 3) tensor of the xyz coordinates of the features
         :param features: (B, C, N) tensor of the descriptors of the the features
@@ -663,9 +694,22 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
                 # save_coords = new_features[:,:3, :, :]
                 # save pre-pooling features from here
+                # =================================================
+                # add a learnable weights here before pooling for visualization
+                # =================================================
                 new_features = self.mlps[i](new_features)  # (B, mlp[-1], npoint, nsample)
                 # ==================================
                 # function to save features before further operations
+                # ==================================
+                if self.pool_weights is not None:
+                    if self.pool_weights.weights is None:
+                        self.pool_weights.init_weights(new_features)
+                    else:
+                        pass
+                    self.pool_weights.reset_weights()
+                    new_features = self.pool_weights(new_features) 
+                    pass
+                
                 # ==================================
                 if self.training is False:
                     if save_features_dir is not None:
