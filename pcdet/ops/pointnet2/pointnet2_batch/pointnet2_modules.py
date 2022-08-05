@@ -359,6 +359,7 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                  sample_idx=False,
                  aggregation_mlp: List[int],
                  confidence_mlp: List[int],
+                 euclidean_mask: False,
                  num_class):
         """
         :param npoint_list: list of int, number of samples for every sampling type
@@ -461,6 +462,26 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         else:
             self.confidence_layers = None
 
+        self.euclidean_mask = euclidean_mask
+        self.temperature = nn.Parameter(torch.rand(1), requires_grad=True)
+                
+
+    def get_min_mask(self, relative_coords):
+        """
+        relative_coords: (B,3,N,npoints)
+
+        returns mask: (B,1,N,npoints)
+        """
+        squared = torch.pow(relative_coords,2)
+        summed = torch.sum(squared,dim=1)
+        distances = torch.sqrt(summed)
+
+        min = torch.amin(distances,dim=-1)
+        mask = min.unsqueeze(2)/distances
+        mask = mask.unsqueeze(1)
+                
+        return mask
+    
     def save_features(self, features, coords, xyz, save_path, frame_id):
         ''' 
         :param features: (B, mlp[-1], npoint, nsample)
@@ -501,6 +522,7 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         new_features_list = []
         xyz_flipped = xyz.transpose(1, 2).contiguous() 
         sampled_idx_list = []
+        
         if ctr_xyz is None:
             last_sample_end_index = 0
             
@@ -626,11 +648,19 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
                 if (self.training is False) & (save_features_dir is not None):
                     new_features = self.groupers[i](xyz, new_xyz, features, save_abs_coord=True)  # (B, C+3, npoint, nsample) point coordinate included        
+
                     save_coords = new_features[:, -3:, : ,:]
                     new_features = new_features[:, :-3, :, :]
                 # save coordinate from here
+                elif ctr_xyz is not None and self.euclidean_mask:
+                    new_features,relative_coords = self.groupers[i](xyz, new_xyz, features,return_coords= True)  # (B, C, npoint, nsample) point coordinate included
+                    mask = self.get_min_mask(relative_coords)
+                    new_features = new_features * mask
+                    
                 else:
                     new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample) point coordinate included
+
+
                 # save_coords = new_features[:,:3, :, :]
                 # save pre-pooling features from here
                 new_features = self.mlps[i](new_features)  # (B, mlp[-1], npoint, nsample)
@@ -666,6 +696,13 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             
         else:
             cls_features = None
+
+        # in last SA LAYER:
+        # print(sampled_idx_list)
+        # print(len(sampled_idx_list))
+        # if len(sampled_idx_list) >0 :
+            # print(f'first batch len{ sampled_idx_list[0].shape}')
+         
 
         if self.sample_idx:
             return new_xyz, new_features, cls_features, sampled_idx_list
