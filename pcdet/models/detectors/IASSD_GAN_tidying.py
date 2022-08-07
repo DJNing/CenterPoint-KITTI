@@ -12,7 +12,7 @@ import numpy as np
 
 
 
-class IASSD_GAN(Detector3DTemplate):
+class IASSD_GAN2(Detector3DTemplate):
     #TODO self.transfer seems useless? 
     def __init__(self, model_cfg, num_class, dataset, tb_log=None):
         super().__init__(model_cfg=model_cfg, num_class=num_class, dataset=dataset)
@@ -59,9 +59,6 @@ class IASSD_GAN(Detector3DTemplate):
 
 # ===========================================================================
     def load_ckpt_to_attach(self, filename, logger, to_cpu=False):
-        """
-        not used..?
-        """
         if not os.path.isfile(filename):
             raise FileNotFoundError
 
@@ -84,11 +81,14 @@ class IASSD_GAN(Detector3DTemplate):
         state_dict.update(update_model_state)
         self.load_state_dict(state_dict)
 
-        # for key in state_dict:
-        #     if key not in update_model_state:
-        #         logger.info('Not updated weight %s: %s' % (key, str(state_dict[key].shape)))
-
         logger.info('==> Done (loaded %d/%d)' % (len(update_model_state), len(self.state_dict())))
+
+    def freeze_radar_backbone(self,logger):
+        for name, param in self.named_parameters():
+            if ('backbone_3d' in name) and ('attach' not in name):
+                param.requires_grad = False
+                logger.info('Freeze param in ' + name)
+
 
     def freeze_attach(self, logger):
         for name, param in self.named_parameters():
@@ -110,8 +110,6 @@ class IASSD_GAN(Detector3DTemplate):
             module, model_info_dict = getattr(self, 'build_%s' % module_name)(
                 model_info_dict=model_info_dict
             )
-            # print("XX"*150)
-            # print(module)
             self.add_module(module_name, module)
         return model_info_dict['module_list']
 
@@ -124,10 +122,6 @@ class IASSD_GAN(Detector3DTemplate):
             num_point_features = model_info_dict['num_point_features_before_fusion']
         else:
             num_point_features = model_info_dict['num_point_features'] # ====> this was changed by backbone3d
-
-        feature_aug_cfg = self.model_cfg if custom_cfg is None else custom_cfg
-
-        # model_info_dict['num_point_features'] =====> change this for detection head
 
         feature_aug_module = FeatureAug(feature_aug_cfg, num_point_features)
         model_info_dict['num_point_features'] = feature_aug_module.channel_out
@@ -175,36 +169,11 @@ class IASSD_GAN(Detector3DTemplate):
 
 # ===========================================================================
 
-    def print_shapes(self, batch_dict):
-        keys = batch_dict.keys()
-        print('='*80)
-        for k in batch_dict.keys():
-            if isinstance(batch_dict[k],int):
-                print(f'{k} (int): {batch_dict[k]}')
-            elif isinstance(batch_dict[k],dict):
-                dict2 = batch_dict[k]
-                print('-'*30+f'inner dict: {k}'+'-'*30)
-                for K in dict2.keys():
-                    if isinstance(dict2[K],int):
-                        print(f'{K}: {dict2[K]}')
-                    elif isinstance(dict2[K],list):
-                        print(f'{K} (len): {len(dict2[K])} , {[len(tensor) for tensor in dict2[K]]}')
-                    elif dict2[K] is None:
-                        print(f'{K}: IS NONE')
-                    else:
-                        print(f'{K}: {dict2[K].shape}')
-                print('-'*60)
-            elif isinstance(batch_dict[k],list):
-                print(f'{k} (len): {len(batch_dict[k])}, {[len(tensor) for tensor in batch_dict[k]]}')
-            elif batch_dict[k] is None:
-                print(f'{k}: is NONE')    
-            else:
-                print(f'{k}: {batch_dict[k].shape}')
-            
     def get_transfer_feature(self, batch_dict):
         attach_dict = {
             'points': torch.clone(batch_dict['attach']),
-            'batch_size': batch_dict['batch_size']
+            'batch_size': batch_dict['batch_size'],
+            'frame_id': batch_dict['frame_id']
         }
 
         attach_dict = self.attach_model(attach_dict)
@@ -218,33 +187,28 @@ class IASSD_GAN(Detector3DTemplate):
         if self.use_feature_aug & self.training:
             if self.attach_model is not None:
                 transfer_dict = self.get_transfer_feature(batch_dict)
-                # self.print_shapes(batch_dict)
-                # print('TRANSFER DICT')
-                # self.print_shapes(transfer_dict)
                 batch_dict['att'] = transfer_dict
+
         for cur_module in self.module_list:
-            
             batch_dict = cur_module(batch_dict)
-            # self.print_shapes(batch_dict)
-            # print('='*150)
+            
         if self.training:
             loss, tb_dict, disp_dict = self.get_training_loss()
-
             # get feat transfer loss
             transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
             disp_dict['det_loss'] = loss.item()
-            disp_dict['matching_loss'] = tb_dict['matching_loss']
-            loss = (transfer_loss + loss) / 2
+            disp_dict['matching_loss'] = tb_dict['matching_loss'] 
+            loss = (transfer_loss +loss)/2  
+
             tb_keys = ['center_loss_cls', 'center_loss_box', 'corner_loss_reg']
 
             ret_dict = {
                 'loss': loss,
                 'gan_loss': transfer_loss
             }
+
             disp_dict['gan_loss'] = transfer_loss.item()
             disp_dict['tatal_loss'] = loss.item()
-
-
 
             shared_det_list = []
             det_list = []
@@ -303,7 +267,7 @@ class IASSD_GAN(Detector3DTemplate):
 
         # get loss from shared_det_head
         tb_dict.update(new_tb_dict)
-        loss = loss_point + loss_match
+        loss = (2/3)*loss_point + (1/3)*loss_match
 
         return loss, tb_dict, disp_dict
 
@@ -425,29 +389,36 @@ class FeatureAug(nn.Module):
 
     def get_loss(self):
         batch_size = self.forward_dict['batch_size']
+        
         lidar_center = self.forward_dict['lidar_centers']
         _, lidar_center, _ = self.break_up_pc(lidar_center)
+        lidar_center = lidar_center.view(batch_size, -1, 3)
+        
         radar_center = self.forward_dict['radar_centers']
         _, radar_center, _ = self.break_up_pc(radar_center)
-        # xyz = xyz.view(batch_size, -1, 3)
-        lidar_center = lidar_center.view(batch_size, -1, 3)
         radar_center = radar_center.view(batch_size, -1, 3)
-
-        lidar_shared_feat = self.forward_dict['lidar_shared'].permute(0,2,1) # [B, C, N] -> [B, N, C]
-        radar_shared_feat = self.forward_dict['radar_shared'].permute(0,2,1)
-        
         
         lidar_xyz = lidar_center
         radar_xyz = radar_center    
         
-        # matching loss
+        lidar_shared_feat = self.forward_dict['lidar_shared'].permute(0,2,1) # [B, C, N] -> [B, N, C]
+        radar_shared_feat = self.forward_dict['radar_shared'].permute(0,2,1)
+        
+        ######################### matching loss #########################
+        # Matching each radar feature to a lidar feature, 
+        # Then MSE loss between the radar features and lidar features
+        # effect should be teaching the network how to output lidar features  
         self_idx, _ = df.ball_point(1, radar_xyz, radar_xyz, 1)
-        cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 1) # this should get the one and only result
+        cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 1) 
+        
         mask = mask.unsqueeze(-1).unsqueeze(-1)
+        
         self_feat = df.index_points_group(radar_shared_feat, self_idx)
         cross_feat = df.index_points_group(lidar_shared_feat, cross_idx)
+
         self_coord = df.index_points_group(radar_xyz, self_idx)
         cross_coord = df.index_points_group(lidar_xyz, cross_idx)
+        
         self_pts = torch.cat((self_coord, self_feat), dim=-1) * mask
         cross_pts = torch.cat((cross_coord, cross_feat), dim=-1) * mask
         
@@ -457,6 +428,7 @@ class FeatureAug(nn.Module):
         elif torch.isnan(cross_pts).sum() > 0:
             print('idx error in cross_pts')
             raise RuntimeError
+
         matching_loss = nn.functional.mse_loss(self_pts, cross_pts, reduction='sum')
         total_num = mask.sum() + 1e-7
         matching_loss = matching_loss / total_num
