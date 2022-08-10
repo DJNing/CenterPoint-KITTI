@@ -5,7 +5,6 @@ import numpy as np
 
 from .rotate_iou import rotate_iou_gpu_eval
 
-isRadar = True
 
 @numba.jit
 def get_thresholds(scores: np.ndarray, num_gt, num_sample_pts=41):
@@ -28,7 +27,7 @@ def get_thresholds(scores: np.ndarray, num_gt, num_sample_pts=41):
     return thresholds
 
 
-def clean_data(gt_anno, dt_anno, current_class, difficulty):
+def clean_data(gt_anno, dt_anno, current_class, difficulty, is_radar):
     CLASS_NAMES = ['car', 'pedestrian', 'cyclist', 'van', 'person_sitting', 'truck']
     MIN_HEIGHT = [40, 25, 25]
     MAX_OCCLUSION = [0, 1, 2]
@@ -58,7 +57,7 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
                 or (gt_anno["truncated"][i] > MAX_TRUNCATION[difficulty]) 
                 or (height <= MIN_HEIGHT[difficulty])):
             if gt_anno["difficulty"][i] > difficulty or gt_anno["difficulty"][i] == -1:
-                if not isRadar:
+                if not is_radar:
                     ignore = True
         if valid_class == 1 and not ignore:
             ignored_gt.append(0)
@@ -76,7 +75,7 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
         else:
             valid_class = -1
         height = abs(dt_anno["bbox"][i, 3] - dt_anno["bbox"][i, 1])
-        if height < MIN_HEIGHT[difficulty] and not isRadar:
+        if height < MIN_HEIGHT[difficulty] and not is_radar:
             ignored_dt.append(1)
         elif valid_class == 1:
             ignored_dt.append(0)
@@ -417,14 +416,14 @@ def calculate_iou_partly(gt_annos, dt_annos, metric, num_parts=50):
     return overlaps, parted_overlaps, total_gt_num, total_dt_num
 
 
-def _prepare_data(gt_annos, dt_annos, current_class, difficulty):
+def _prepare_data(gt_annos, dt_annos, current_class, difficulty, is_radar):
     gt_datas_list = []
     dt_datas_list = []
     total_dc_num = []
     ignored_gts, ignored_dets, dontcares = [], [], []
     total_num_valid_gt = 0
     for i in range(len(gt_annos)):
-        rets = clean_data(gt_annos[i], dt_annos[i], current_class, difficulty)
+        rets = clean_data(gt_annos[i], dt_annos[i], current_class, difficulty, is_radar)
         num_valid_gt, ignored_gt, ignored_det, dc_bboxes = rets
         ignored_gts.append(np.array(ignored_gt, dtype=np.int64))
         ignored_dets.append(np.array(ignored_det, dtype=np.int64))
@@ -454,6 +453,7 @@ def eval_class(gt_annos,
                difficultys,
                metric,
                min_overlaps,
+               is_radar,
                compute_aos=False,
                num_parts=100):
     """Kitti eval. support 2d/bev/3d/aos eval. support 0.5:0.05:0.95 coco AP.
@@ -486,7 +486,7 @@ def eval_class(gt_annos,
     aos = np.zeros([num_class, num_difficulty, num_minoverlap, N_SAMPLE_PTS])
     for m, current_class in enumerate(current_classes):
         for l, difficulty in enumerate(difficultys):
-            rets = _prepare_data(gt_annos, dt_annos, current_class, difficulty)
+            rets = _prepare_data(gt_annos, dt_annos, current_class, difficulty, is_radar)
             (gt_datas_list, dt_datas_list, ignored_gts, ignored_dets,
              dontcares, total_dc_num, total_num_valid_gt) = rets
             for k, min_overlap in enumerate(min_overlaps[:, metric, m]):
@@ -583,12 +583,13 @@ def do_eval(gt_annos,
             dt_annos,
             current_classes,
             min_overlaps,
+            is_radar,
             compute_aos=False,
             PR_detail_dict=None):
     # min_overlaps: [num_minoverlap, metric, num_class]
     difficultys = [0, 1, 2]
     ret = eval_class(gt_annos, dt_annos, current_classes, difficultys, 0,
-                     min_overlaps, compute_aos)
+                     min_overlaps, compute_aos=compute_aos, is_radar=is_radar)
     # ret: [num_class, num_diff, num_minoverlap, num_sample_points]
     mAP_bbox = get_mAP(ret["precision"])
     mAP_bbox_R40 = get_mAP_R40(ret["precision"])
@@ -605,7 +606,7 @@ def do_eval(gt_annos,
             PR_detail_dict['aos'] = ret['orientation']
 
     ret = eval_class(gt_annos, dt_annos, current_classes, difficultys, 1,
-                     min_overlaps)
+                     min_overlaps, is_radar)
     mAP_bev = get_mAP(ret["precision"])
     mAP_bev_R40 = get_mAP_R40(ret["precision"])
 
@@ -613,7 +614,7 @@ def do_eval(gt_annos,
         PR_detail_dict['bev'] = ret['precision']
 
     ret = eval_class(gt_annos, dt_annos, current_classes, difficultys, 2,
-                     min_overlaps)
+                     min_overlaps, is_radar)
     mAP_3d = get_mAP(ret["precision"])
     mAP_3d_R40 = get_mAP_R40(ret["precision"])
     if PR_detail_dict is not None:
@@ -639,8 +640,8 @@ def do_coco_style_eval(gt_annos, dt_annos, current_classes, overlap_ranges,
     return mAP_bbox, mAP_bev, mAP_3d, mAP_aos
 
 
-def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict=None):
-    if isRadar:
+def get_official_eval_result(gt_annos, dt_annos, current_classes, is_radar, PR_detail_dict=None):
+    if is_radar:
         overlap_0_7 = np.array([[0.5, 0.25, 0.25, 0.5,
                              0.25, 0.25], [0.5, 0.25, 0.25, 0.5, 0.25, 0.25],
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.25]])
@@ -648,12 +649,12 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
                                 0.25, 0.25], [0.5, 0.25, 0.25, 0.5, 0.25, 0.25],
                                 [0.5, 0.25, 0.25, 0.5, 0.25, 0.25]])
     else:
-        overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7,
-                                0.5, 0.7], [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
+        overlap_0_7 = np.array([[0.75, 0.5, 0.5, 0.75,
+                                0.5, 0.5], [0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
                                 [0.7, 0.5, 0.5, 0.7, 0.5, 0.7]])
-        overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7,
-                                0.5, 0.5], [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
-                                [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])
+        overlap_0_5 = np.array([[0.75, 0.5, 0.5, 0.75,
+                                0.5, 0.5], [0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
+                                [0.75, 0.5, 0.5, 0.75, 0.5, 0.5]])
     min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
     class_to_name = {
         0: 'Car',
@@ -683,7 +684,7 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
                 compute_aos = True
             break
     mAPbbox, mAPbev, mAP3d, mAPaos, mAPbbox_R40, mAPbev_R40, mAP3d_R40, mAPaos_R40 = do_eval(
-        gt_annos, dt_annos, current_classes, min_overlaps, compute_aos, PR_detail_dict=PR_detail_dict)
+        gt_annos, dt_annos, current_classes, min_overlaps, compute_aos=compute_aos, is_radar=is_radar, PR_detail_dict=PR_detail_dict)
 
     ret_dict = {}
     total_mAP_bbox = 0.0
