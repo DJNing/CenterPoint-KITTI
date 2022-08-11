@@ -376,16 +376,26 @@ class KittiDataset(DatasetTemplate):
             return None, {}
 
         from .vod_official_eval import kitti_official_evaluate as vod_eval
+        from .kitti_object_eval_python import eval as kitti_eval
 
         eval_det_annos = copy.deepcopy(det_annos)
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
 
-        evaluation_result = {}
-        evaluation_result.update(
-            vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
-        evaluation_result.update(
-            vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
-                                              is_radar=self.is_radar))
+        switch_to_vod_eval = True
+        if switch_to_vod_eval:
+            evaluation_result = {}
+            evaluation_result.update(
+                vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
+            evaluation_result.update(
+                vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
+                                                    is_radar=self.is_radar))
+        else:
+            evaluation_result = {}
+            evaluation_result.update(
+                kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
+            evaluation_result.update(
+                kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
+                                                  is_radar=self.is_radar))
 
         return evaluation_result
 
