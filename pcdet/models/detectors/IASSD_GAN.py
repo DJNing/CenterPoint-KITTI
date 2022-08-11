@@ -75,10 +75,11 @@ class IASSD_GAN(Detector3DTemplate):
 
 
     def forward(self, batch_dict):
-        if self.use_feature_aug & self.training:
-            if self.attach_model is not None:
-                transfer_dict = self.get_transfer_feature(batch_dict)
-                batch_dict['att'] = transfer_dict
+        if self.use_feature_aug:
+            if self.training or self.debug:
+                if self.attach_model is not None:
+                    transfer_dict = self.get_transfer_feature(batch_dict)
+                    batch_dict['att'] = transfer_dict
         for cur_module in self.module_list:
             batch_dict = cur_module(batch_dict)
         # for i in range(self.full_len):
@@ -131,12 +132,42 @@ class IASSD_GAN(Detector3DTemplate):
                 loss, tb_dict, disp_dict = self.get_training_loss()
                 transfer_loss = self.get_transfer_loss(batch_dict)
                 batch_dict['sa_ins_labels'] = tb_dict['sa_ins_labels']
-                # selected lidar points
-                # selected lidar points labels
-                # radar points labels
-                # radar points classification
+                batch_dict['transfer_loss'] = transfer_loss
+                # run backward for matching loss
+                # 1. get attach(lidar) pooling weights
+                # pts_dict = tb_dict['pts_dict']
+                # attach_pts = pts_dict['cross_pts']
+                # self_pts = pts_dict['self_pts']
+
+                loss.backward()
+                # self.attach_model()
+                bb = self.attach_model.SA_modules
+                attach_grad_dict = {}
+                for m_name, m in bb.named_modules():
+                    if 'pool_weights' in m_name:
+                        try:
+                            pw_grad = m.weights.grad.detach().cpu().numpy()
+                            attach_grad_dict[m_name] = pw_grad
+                        except:
+                            pass
+
+                        
+
+                # 2. get main(radar) pooling weights
+                main_grad_dict = {}
+                bb = self.backbone_3d
+                for m_name, m in bb.named_modules():
+                    if 'pool_weights' in m_name:
+                        try:
+                            pw_grad = m.weights.grad.detach().cpu().numpy()
+                            main_grad_dict[m_name] = pw_grad
+                        except:
+                            pass
+                # save grad of pooling weights for all layer 
                 pass
             # recall_dicts['batch_dict'] = batch_dict
+            pred_dicts[0]['attach_pw_dict'] = attach_grad_dict
+            pred_dicts[0]['main_pw_dict'] = main_grad_dict
             return pred_dicts, recall_dicts
 
     def build_feature_aug(self, model_info_dict, custom_cfg=None):
@@ -336,7 +367,8 @@ class IASSD_GAN(Detector3DTemplate):
     def get_transfer_feature(self, batch_dict):
         attach_dict = {
             'points': torch.clone(batch_dict['attach']),
-            'batch_size': batch_dict['batch_size']
+            'batch_size': batch_dict['batch_size'],
+            'frame_id': batch_dict['frame_id']
         }
         # torch.clone(batch_dict)
         # attach_dict['points'] = attach_dict['attach']
@@ -498,15 +530,23 @@ class IASSD_GAN(Detector3DTemplate):
 
     def get_training_loss(self):
         disp_dict = {}
-        loss_point, tb_dict = self.point_head.get_loss()
-        loss_match, new_tb_dict = self.feature_aug.get_loss()
+        if self.debug:
 
-        # get loss from shared_det_head
+            loss_match, pts_dict = self.feature_aug.get_loss(self.debug)
+            loss_point, tb_dict = self.point_head.get_loss()
+            tb_dict['pts_dict'] = pts_dict
+            return loss_match, tb_dict, disp_dict
+        else:
+            loss_point, tb_dict = self.point_head.get_loss()
+            loss_match, new_tb_dict = self.feature_aug.get_loss()
+
+            # get loss from shared_det_head
 
 
-        tb_dict.update(new_tb_dict)
-        loss = loss_point + loss_match
-        return loss, tb_dict, disp_dict
+            tb_dict.update(new_tb_dict)
+            loss = loss_point + loss_match
+            return loss, tb_dict, disp_dict
+        
 
 class feat_gan(nn.Module):
     def __init__(self, mlps, nsample, transfer_layer, contrastive=True):
@@ -822,6 +862,7 @@ class FeatureAug(nn.Module):
         self.model_cfg = model_cfg
         # self.input_channel = input_channels # exact number of the center feature vector
         # self.output_channel = 
+        self.debug = model_cfg.get('DEBUG', False)
         self.relu = self.model_cfg.get('RELU', True)
         self.bn = self.model_cfg.get('BN', True)
         self.mlps = self.model_cfg.get('MLPS', [448, 384, 320, 256])
@@ -839,7 +880,7 @@ class FeatureAug(nn.Module):
         shared_radar = self.radar_shared_mlp(radar_feat)
         # replace the feature or fuse it back
         # don't run this during evaluation
-        if self.training:
+        if self.training or self.debug:
             attach_dict = x['att']
 
             att_feats = attach_dict['encoder_features']
@@ -858,7 +899,7 @@ class FeatureAug(nn.Module):
         
             shared_lidar = self.lidar_shared_mlp(lidar_feat) # [B, C, N]
 
-        if self.training:
+        if self.training or self.debug:
             self.forward_dict['batch_size'] = batch_dict['batch_size']
             self.forward_dict['lidar_original'] = lidar_feat
             self.forward_dict['radar_original'] = radar_feat
@@ -883,7 +924,7 @@ class FeatureAug(nn.Module):
         features = (pc[:, 4:].contiguous() if pc.size(-1) > 4 else None)
         return batch_idx, xyz, features
 
-    def get_loss(self):
+    def get_loss(self, debug=False):
         # lidar_original = self.forward_dict['lidar_original']
         # radar_original = self.forward_dict['radar_original']
         # lidar_recover = self.forward_dict['lidar_recover']
@@ -937,7 +978,14 @@ class FeatureAug(nn.Module):
         tb_dict = {
             'matching_loss': matching_loss.item()
         }
-        return matching_loss, tb_dict
+        if debug:
+            pts_dict = {
+                'self_pts':self_pts,
+                'cross_pts': cross_pts
+            }
+            return matching_loss, pts_dict
+        else:
+            return matching_loss, tb_dict
 # def get_domain_cross_loss(self, x):
 #         lidar_original = x['lidar_original']
 #         radar_original = x['radar_original']

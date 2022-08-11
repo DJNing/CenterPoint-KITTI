@@ -67,6 +67,19 @@ def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id
         result_dir=eval_output_dir, save_to_file=save_to_file, save_centers=save_centers
     )
 
+def vis_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False, reload=True, \
+    save_to_file=False, result_dir=None, save_centers=False):
+    # load checkpoint
+    # if reload:
+    #     model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test)
+    #     model.cuda()
+    # ipdb.set_trace()
+    # start evaluation
+    save_to_file = args.save_to_file
+    eval_utils.vis_one_epoch(
+        cfg, model, test_loader, epoch_id, logger, dist_test=dist_test,
+        result_dir=eval_output_dir, save_to_file=save_to_file, save_centers=save_centers
+    )
 
 def get_no_evaluated_ckpt(ckpt_dir, ckpt_record_file, args):
     ckpt_list = glob.glob(os.path.join(ckpt_dir, '*checkpoint_epoch_*.pth'))
@@ -127,7 +140,11 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
 
         if cfg.LOCAL_RANK == 0:
             for key, val in tb_dict.items():
-                tb_log.add_scalar(key, val, cur_epoch_id)
+                    if isinstance(val, dict):
+                        for sub_key, sub_val in val.items():
+                            tb_log.add_scalar(sub_key, sub_val, cur_epoch_id)
+                    else:
+                        tb_log.add_scalar(key, val, cur_epoch_id)
 
         # record this epoch which has been evaluated
         with open(ckpt_record_file, 'a') as f:

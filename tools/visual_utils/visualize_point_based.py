@@ -92,7 +92,7 @@ def anno2plt(anno, color_dict, lw, frame_id, xz=False):
 
 
 
-def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title):
+def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends=[]):
 
 
     # 3. draw bbx
@@ -115,8 +115,10 @@ def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title):
         ax.scatter(cx, cy, c='red', s=0.1)
 
     legend_elements = [Patch(facecolor='white', edgecolor=v, label=k) for i, (k, v) in enumerate(color_dict.items())]
-    legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
+    if centers is not None:
+        legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
                           markerfacecolor='r', markersize=10)]
+    legend_elements += ext_legends
     ax.legend(handles=legend_elements, loc=1)
     ax.set_title(ax_title)
 
@@ -134,11 +136,11 @@ if __name__ == '__main__':
     
     
     # trans-ssd
-    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/checkpoint_epoch_11')
+    # root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/checkpoint_epoch_11')
     # ia-ssd
     # root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_128_all/eval/checkpoint_epoch_100')
-    
-    # root_path = P('/root/dj/code/CenterPoint-KITTI/output/pointpillar_vod_lidar/filter5/eval/eval_with_train/epoch_80/val')
+    # base model 
+    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint')
 
     color_dict = {}
 
@@ -150,11 +152,11 @@ if __name__ == '__main__':
     for i, v in enumerate(cls_name):
         color_dict[v] = label_color_palette_2d[v]
     # load gt
-    with open(str(root_path / 'gt.pkl'), 'rb') as f:
+    with open(str(root_path / 'radar_label.pkl'), 'rb') as f:
         gt = pickle.load(f)
 
     # load det
-    with open(str(root_path / 'dt.pkl'), 'rb') as f:
+    with open(str(root_path / 'radar_preds.pkl'), 'rb') as f:
         dt = pickle.load(f)
 
     # load centers

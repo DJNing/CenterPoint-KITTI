@@ -4,9 +4,9 @@ import glob
 from itertools import cycle
 import os
 # import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
-from test import repeat_eval_ckpt, eval_single_ckpt
+from test import repeat_eval_ckpt, eval_single_ckpt, vis_single_ckpt
 # from eval_utils import eval_utils
 import torch
 import torch.distributed as dist
@@ -20,7 +20,7 @@ from pcdet.models import build_network, model_fn_decorator
 from pcdet.utils import common_utils
 from train_utils.optimization import build_optimizer, build_scheduler
 from train_utils.train_utils import train_model
-
+from eval_utils import eval_utils
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
@@ -124,9 +124,16 @@ def main():
     )
 
     # cfg.MODEL['DISABLE_ATTACH'] = True
-    cfg.DATA_CONFIG['DEBUG'] = cfg.MODEL.get('DEBUG', False)
-    cfg.DATA_CONFIG['USE_ATTACH'] = cfg.get('USE_ATTACH', False)
+    # cfg.DATA_CONFIG['DEBUG'] = cfg.MODEL.get('DEBUG', False)
+    cfg.DATA_CONFIG['DEBUG'] = True
+    # cfg.DATA_CONFIG['USE_ATTACH'] = cfg.get('USE_ATTACH', False)
+    cfg.DATA_CONFIG['USE_ATTACH'] = True
+    cfg.MODEL['DEBUG'] = True
     cfg.MODEL['CLASS_NAMES'] = cfg.CLASS_NAMES
+    cfg.MODEL['USE_POOLING_WEIGHT'] = True
+    cfg.MODEL.BACKBONE_3D['USE_POOLING_WEIGHT'] = True
+    cfg.MODEL.ATTACH_NETWORK.BACKBONE_3D['USE_POOLING_WEIGHT'] = True
+    cfg.MODEL.FEAT_AUG['DEBUG'] = True
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set, tb_log=tb_log)
     if args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -144,51 +151,14 @@ def main():
     if args.pretrained_model is not None:
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
-    setattr(model, 'vis', True)
+
     model_mem_usage = torch.cuda.memory_allocated(torch.device('cuda'))
     
     model_size = model_mem_usage - init_mem_usage
 
     model_size = model_size / 1024 / 1024 # in MB
     logger.info('model size is %.4f MB' % model_size)
-
-    # if args.ckpt is not None:
-    #     it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
-    #     last_epoch = start_epoch + 1
-    # else:
-    #     ckpt_list = glob.glob(str(ckpt_dir / '*checkpoint_epoch_*.pth'))
-    #     if len(ckpt_list) > 0:
-    #         ckpt_list.sort(key=os.path.getmtime)
-    #         it, start_epoch = model.load_params_with_optimizer(
-    #             ckpt_list[-1], to_cpu=dist, optimizer=optimizer, logger=logger
-    #         )
-    #         last_epoch = start_epoch + 1
-
-    # model.train()  # before wrap to DistributedDataParallel to support fixed some parameters
-    # if dist_train:
-    #     model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
     logger.info(model)
-
-    # lr_scheduler, lr_warmup_scheduler = build_scheduler(
-    #     optimizer, total_iters_each_epoch=len(train_loader), total_epochs=args.epochs,
-    #     last_epoch=last_epoch, optim_cfg=cfg.OPTIMIZATION
-    # )
-    # split the train eval into several cycles
-    # eval_interval = 10
-    # cycle_num = int(float(args.epochs) / eval_interval + 0.5) # ceiling
-    # start_cycle = start_epoch // eval_interval
-    # cur_epoch = start_epoch
-    # for i in range(start_cycle, cycle_num):
-    #     if i == cycle_num - 1:
-    #         train_start_epoch = i * eval_interval
-    #         train_end_epoch = args.epochs
-    #     else:
-    #         train_start_epoch = cur_epoch
-    #         train_end_epoch = i * eval_interval
-    #         cur_epoch = train_end_epoch
-        
-
-
 
     # -----------------------start training---------------------------
     logger.info('**********************Start training %s/%s(%s)**********************'
@@ -209,12 +179,16 @@ def main():
     ckpt_tag = args.pretrained_model.split('/')[-1].split('.')[0]
     eval_output_dir = output_dir / 'eval' / ckpt_tag
     eval_output_dir.mkdir(parents=True, exist_ok=True)
-    eval_single_ckpt(model, test_loader, args, \
+    # eval_single_ckpt(model, test_loader, args, \
+    # eval_output_dir, logger=logger, epoch_id=args.epochs, \
+    # reload=False, save_to_file=args.save_to_file,\
+    #     result_dir=args.result_dir, save_centers=True)
+    # args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
+
+    vis_single_ckpt(model, test_loader, args, \
     eval_output_dir, logger=logger, epoch_id=args.epochs, \
     reload=False, save_to_file=args.save_to_file,\
         result_dir=args.result_dir, save_centers=True)
-    # args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
-
     # repeat_eval_ckpt(
     #     model.module if dist_train else model,
     #     test_loader, args, eval_output_dir, logger, ckpt_dir,

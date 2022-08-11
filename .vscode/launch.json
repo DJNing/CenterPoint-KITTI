@@ -13,11 +13,11 @@
             "justMyCode": true,
             "args": [
                 "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/kitti_models/IA-SSD-GAN-vod-aug.yaml", 
-                "--epoch", "20", 
+                // "--epoch", "20", 
                 "--workers", "8", 
                 "--extra_tag", "debug",
                 "--batch_size", "16",
-                "--save_to_file", "False",
+                // "--save_to_file", "False",
                 "--pretrained_model", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/ckpt/checkpoint_epoch_11.pth"
             ]
         }

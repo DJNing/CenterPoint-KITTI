@@ -1,4 +1,5 @@
 import pathlib
+from pyexpat import model
 import torch
 import torch.nn as nn
 
@@ -34,6 +35,8 @@ class IASSD_Backbone(nn.Module):
         # self.save_features_dir = path/to/save or None
         # =====================================================
         self.save_features_dir = model_cfg.get('SAVE_FEAT_DIR', None)
+        # only use pooling for visualizations this option is injected in the main script
+        self.use_pooling_weight = model_cfg.get('USE_POOLING_WEIGHT', False)
 
         for k in range(sa_config.NSAMPLE_LIST.__len__()):
             if isinstance(self.layer_inputs[k], list): ###
@@ -78,8 +81,8 @@ class IASSD_Backbone(nn.Module):
                         dilated_group=sa_config.DILATED_GROUP[k],
                         aggregation_mlp=aggregation_mlp,
                         confidence_mlp=confidence_mlp,
-                        euclidean_mask = self.euclidean_mask[k],
                         num_class = self.num_class,
+                        use_pooling_weights=self.use_pooling_weight
                     )
                 )
 

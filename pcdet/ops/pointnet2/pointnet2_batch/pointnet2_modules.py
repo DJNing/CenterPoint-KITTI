@@ -80,6 +80,7 @@ class _PointnetSAModuleBase(nn.Module):
             new_features_list.append(new_features)
 
         return new_xyz, torch.cat(new_features_list, dim=1)
+
 class PoolingWeight(nn.Module):
     def __init__(self):
         super().__init__()
@@ -92,10 +93,17 @@ class PoolingWeight(nn.Module):
     def init_weights(self, features):
         B, _, N, ns = features.shape
         self.weights = torch.ones([B, 1, N, ns])
-        self.weights.to(features.device)
+        self.weights = self.weights.to(features.device)
         self.device = features.device
         self.weights.requires_grad = True
     
+    def clear_grad(self):
+        try:
+            self.weights.grad.zero_()
+        except:
+            pass
+                
+
     def reset_weights(self):
         self.weights.fill_(1)
 
@@ -412,6 +420,8 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
         self.npoint_list = npoint_list
         self.groupers = nn.ModuleList()
+        self.use_pool_weights = use_pooling_weights
+        self.pool_weights = nn.ModuleList()
         self.mlps = nn.ModuleList()
         self.reverse = reverse
         out_channels = 0
@@ -421,10 +431,7 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         self.saving_cnt = 0
         # ===========================================
         # initialize a module to get weights
-        if use_pooling_weights: 
-            self.pool_weights = PoolingWeight()
-        else:
-            self.pool_weights = None
+        # pooling weights module is required for each SA_Layer
         # ===========================================
         for i in range(len(radii)):
             radius = radii[i]
@@ -439,12 +446,18 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                         radius, min_radius, nsample, use_xyz=use_xyz)
                     if npoint_list is not None else pointnet2_utils.GroupAll(use_xyz)
                 )
+                if self.use_pool_weights:
+                    self.pool_weights.append(PoolingWeight())
             else:
                 self.groupers.append(
                     pointnet2_utils.QueryAndGroup(
                         radius, nsample, use_xyz=use_xyz)
                     if npoint_list is not None else pointnet2_utils.GroupAll(use_xyz)
                 )
+
+                if self.use_pool_weights:
+                    self.pool_weights.append(PoolingWeight())
+
             mlp_spec = mlps[i]
             if use_xyz:
                 mlp_spec[0] += 3
@@ -701,15 +714,12 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                 # ==================================
                 # function to save features before further operations
                 # ==================================
-                if self.pool_weights is not None:
-                    if self.pool_weights.weights is None:
-                        self.pool_weights.init_weights(new_features)
-                    else:
-                        pass
-                    self.pool_weights.reset_weights()
-                    new_features = self.pool_weights(new_features) 
-                    pass
-                
+                if self.use_pool_weights:
+                    p_weights = self.pool_weights[i]
+                    if p_weights.weights is None:
+                        p_weights.init_weights(new_features)
+                    p_weights.clear_grad()
+                    new_features = p_weights(new_features)
                 # ==================================
                 if self.training is False:
                     if save_features_dir is not None:
