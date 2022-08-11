@@ -47,7 +47,7 @@ def parse_config():
     parser.add_argument('--freeze_part', type=bool, default=False, help='load head params only and freeze them during training')
     # parser.add_argument('--modality', default='lidar', help='specify data modality, default is lidar.')
     parser.add_argument('--eval_epoch', type=int, default=1, help='number of epoch for eval once')
-    parser.add_argument('--eval_save', type=bool, default=False, help='save best eval model during training')
+    parser.add_argument('--eval_save', type=bool, default=True, help='save best eval model during training')
 
     args = parser.parse_args()
     print(args.freeze_part)
@@ -181,7 +181,10 @@ def main():
     model.train()  # before wrap to DistributedDataParallel to support fixed some parameters
     if cfg.get('USE_ATTACH', False):
         model.freeze_attach(logger)
-        
+    
+    if cfg.get('FREEZE_RADAR_BACKBONE', False):
+        model.freeze_radar_backbone(logger)
+
     if dist_train:
         model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
     logger.info(model)
