@@ -33,8 +33,7 @@ class KittiDataset(DatasetTemplate):
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
 
-        #  not sure if modifying /datasets/dataset.py is a good idea so 
-        # doing it like this for now, 
+
         self.is_radar = dataset_cfg.get('IS_RADAR', False)
         # self.is_radar = False
         self.debug = dataset_cfg.get('DEBUG', False)
