@@ -27,7 +27,7 @@ class IASSD_Backbone(nn.Module):
         self.aggregation_mlps = sa_config.get('AGGREGATION_MLPS', None)
         self.confidence_mlps = sa_config.get('CONFIDENCE_MLPS', None)
         self.max_translate_range = sa_config.get('MAX_TRANSLATE_RANGE', None)
-
+        self.euclidean_mask = sa_config.get('EUCLIDEAN_MASK', None)
         # =====================================================
         # add options in backbone configuration, a path to save 
         # intermediate features during grouping at inference
@@ -64,6 +64,8 @@ class IASSD_Backbone(nn.Module):
                 else:
                     confidence_mlp = None
 
+
+                        
                 self.SA_modules.append(
                     pointnet2_modules.PointnetSAModuleMSG_WithSampling(
                         npoint_list=sa_config.NPOINT_LIST[k],
@@ -76,7 +78,8 @@ class IASSD_Backbone(nn.Module):
                         dilated_group=sa_config.DILATED_GROUP[k],
                         aggregation_mlp=aggregation_mlp,
                         confidence_mlp=confidence_mlp,
-                        num_class = self.num_class
+                        euclidean_mask = self.euclidean_mask[k],
+                        num_class = self.num_class,
                     )
                 )
 
@@ -164,7 +167,7 @@ class IASSD_Backbone(nn.Module):
                     
                     save_path = str(save_path)
                     if not os.path.exists(save_path):
-                        os.mkdir(save_path)
+                        os.makedirs(save_path)
                 # construct a saving path for different layer
 
                 li_xyz, li_features, li_cls_pred = self.SA_modules[i](xyz_input, feature_input, li_cls_pred, ctr_xyz=ctr_xyz, save_features_dir=save_path, frame_id=batch_dict['frame_id'][0])
@@ -198,7 +201,11 @@ class IASSD_Backbone(nn.Module):
         batch_dict['centers'] = torch.cat((ctr_batch_idx[:, None].float(), centers.contiguous().view(-1, 3)), dim=1)
         batch_dict['centers_origin'] = torch.cat((ctr_batch_idx[:, None].float(), centers_origin.contiguous().view(-1, 3)), dim=1)
         batch_dict['ctr_batch_idx'] = ctr_batch_idx
-        
+        # print("="*70)
+        # print('BATCH IDX')
+        # print(batch_dict['ctr_batch_idx'])
+        # print(batch_dict['ctr_batch_idx'].shape)
+        # print("="*70)
         center_features = encoder_features[-1].permute(0, 2, 1).contiguous().view(-1, encoder_features[-1].shape[1]) # shape?
         batch_dict['centers_features'] = center_features
 
@@ -212,7 +219,7 @@ class IASSD_Backbone(nn.Module):
         batch_dict['sa_ins_preds'] = sa_ins_preds
         batch_dict['encoder_features'] = encoder_features # not used later?
         
-        
+
         ###save per frame 
         # if self.model_cfg.SA_CONFIG.get('SAVE_SAMPLE_LIST',False) and not self.training:  
         #     import numpy as np 
