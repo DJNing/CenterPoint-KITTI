@@ -28,7 +28,7 @@ class IASSD_Backbone(nn.Module):
         self.aggregation_mlps = sa_config.get('AGGREGATION_MLPS', None)
         self.confidence_mlps = sa_config.get('CONFIDENCE_MLPS', None)
         self.max_translate_range = sa_config.get('MAX_TRANSLATE_RANGE', None)
-        self.euclidean_mask = sa_config.get('EUCLIDEAN_MASK', None)
+        self.euclidean_mask = sa_config.get('EUCLIDEAN_MASK', [False, False, False, False, False, False])
         # =====================================================
         # add options in backbone configuration, a path to save 
         # intermediate features during grouping at inference
@@ -82,7 +82,8 @@ class IASSD_Backbone(nn.Module):
                         aggregation_mlp=aggregation_mlp,
                         confidence_mlp=confidence_mlp,
                         num_class = self.num_class,
-                        use_pooling_weights=self.use_pooling_weight
+                        use_pooling_weights=self.use_pooling_weight,
+                        euclidean_mask=self.euclidean_mask
                     )
                 )
 
