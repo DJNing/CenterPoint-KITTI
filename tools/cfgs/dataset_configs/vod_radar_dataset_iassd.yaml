@@ -16,7 +16,7 @@ INFO_PATH: {
 }
 
 FOV_POINTS_ONLY: True
-MODALITY: 'lidar'
+MODALITY: 'radar'
 IS_RADAR: True
 
 TRAIN_LABEL_FILTER: 

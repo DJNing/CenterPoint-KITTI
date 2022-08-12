@@ -507,7 +507,7 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             self.confidence_layers = None
 
         self.euclidean_mask = euclidean_mask
-        self.temperature = nn.Parameter(torch.rand(1), requires_grad=True)
+        
                 
 
     def get_min_mask(self, relative_coords):

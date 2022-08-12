@@ -129,10 +129,11 @@ class IASSD_GAN2(Detector3DTemplate):
         return feature_aug_module, model_info_dict
 
     def build_attach_network(self):
+        num_feats = self.attach_model_cfg.get('NUM_POINT_FEATURES',4) 
         model_info_dict = {
             'module_list': [],
-            'num_rawpoint_features': 4,
-            'num_point_features': 4,
+            'num_rawpoint_features': num_feats,
+            'num_point_features': num_feats,
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
             'voxel_size': self.dataset.voxel_size,
@@ -147,9 +148,10 @@ class IASSD_GAN2(Detector3DTemplate):
         return model_info_dict['module_list']
     
     def build_shared_head(self):
+        num_feats = self.attach_model_cfg.get('NUM_POINT_FEATURES',4) 
         model_info_dict = {
             'module_list': [],
-            'num_rawpoint_features': 4,
+            'num_rawpoint_features': num_feats,
             'num_point_features': self.model_cfg.SHARED_HEAD.NUM_POINT_FEATURES,
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
@@ -198,7 +200,7 @@ class IASSD_GAN2(Detector3DTemplate):
             transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
             disp_dict['det_loss'] = loss.item()
             disp_dict['matching_loss'] = tb_dict['matching_loss'] 
-            loss = (transfer_loss +loss)/2  
+            loss = (transfer_loss +loss)/2 
 
             tb_keys = ['center_loss_cls', 'center_loss_box', 'corner_loss_reg']
 
@@ -268,6 +270,7 @@ class IASSD_GAN2(Detector3DTemplate):
         # get loss from shared_det_head
         tb_dict.update(new_tb_dict)
         loss = (2/3)*loss_point + (1/3)*loss_match
+        # loss = loss_point + loss_match
 
         return loss, tb_dict, disp_dict
 

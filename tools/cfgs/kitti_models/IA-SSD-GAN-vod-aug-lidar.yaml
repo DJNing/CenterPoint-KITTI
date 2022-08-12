@@ -1,9 +1,11 @@
 # CLASS_NAMES: ['Car', 'Truck']
 CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 
+IS_RADAR: False
 DATA_CONFIG:
     _BASE_CONFIG_: /root/gabriel/code/parent/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset_iassd_lidar.yaml
     # TODO: handle data_processor base on different modality
+    USE_VOD_EVAL: True
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
             REMOVE_OUTSIDE_BOXES: True
