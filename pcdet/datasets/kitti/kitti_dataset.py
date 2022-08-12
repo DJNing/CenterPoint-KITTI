@@ -32,8 +32,9 @@ class KittiDataset(DatasetTemplate):
 
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
-
-
+        self.use_vod_eval = dataset_cfg.get('USE_VOD_EVAL', False)
+        #  not sure if modifying /datasets/dataset.py is a good idea so 
+        # doing it like this for now, 
         self.is_radar = dataset_cfg.get('IS_RADAR', False)
         # self.is_radar = False
         self.debug = dataset_cfg.get('DEBUG', False)
@@ -381,8 +382,9 @@ class KittiDataset(DatasetTemplate):
         eval_det_annos = copy.deepcopy(det_annos)
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
 
-        switch_to_vod_eval = True
+        switch_to_vod_eval = self.use_vod_eval
         if switch_to_vod_eval:
+            self.logger.info('*************   using vod official evaluation script   *************')
             evaluation_result = {}
             evaluation_result.update(
                 vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
@@ -390,13 +392,17 @@ class KittiDataset(DatasetTemplate):
                 vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
                                                     is_radar=self.is_radar))
         else:
+            self.logger.info('*************   using pcdet official evaluation script   *************')
             evaluation_result = {}
+            result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar)
             evaluation_result.update(
-                kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
-            evaluation_result.update(
-                kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
-                                                  is_radar=self.is_radar))
-
+                ap_dict)
+            # evaluation_result.update(
+            #     kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
+            #                                       is_radar=self.is_radar))
+            self.logger.info(result_str)
+        # import ipdb
+        # ipdb.set_trace()
         return evaluation_result
 
     def __len__(self):

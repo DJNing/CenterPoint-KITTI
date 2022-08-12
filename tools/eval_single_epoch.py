@@ -144,7 +144,8 @@ def main():
     if args.pretrained_model is not None:
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
-    setattr(model, 'vis', True)
+    setattr(model, 'vis', False)
+
     model_mem_usage = torch.cuda.memory_allocated(torch.device('cuda'))
     
     model_size = model_mem_usage - init_mem_usage
@@ -202,7 +203,7 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        batch_size=1,
+        batch_size=16,
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
 
