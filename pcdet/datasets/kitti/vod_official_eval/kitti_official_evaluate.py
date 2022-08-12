@@ -2,7 +2,8 @@
 # Licensed under The MIT License
 import numpy as np
 import numba
-from .rotate_iou_cpu import rotate_iou_eval
+# from .rotate_iou_cpu import rotate_iou_eval
+from .rotate_iou_cuda import rotate_iou_gpu_eval as rotate_iou_eval
 
 
 @numba.jit
