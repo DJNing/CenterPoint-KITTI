@@ -1,9 +1,11 @@
 CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 # CLASS_NAMES: ['Car']
 
-DATA_CONFIG:
-    _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_lidar_dataset.yaml
 
+
+DATA_CONFIG:
+    USE_VOD_EVAL: False
+    _BASE_CONFIG_: /root/gabriel/code/parent/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_lidar_dataset.yaml
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
             REMOVE_OUTSIDE_BOXES: True
@@ -118,11 +120,11 @@ MODEL:
 
 OPTIMIZATION:
     BATCH_SIZE_PER_GPU: 8
-    NUM_EPOCHS: 80
+    NUM_EPOCHS: 100
 
     OPTIMIZER: adam_onecycle
     LR: 0.01
-    WEIGHT_DECAY: 0.01
+    WEIGHT_DECAY: 0.02
     MOMENTUM: 0.9
 
     MOMS: [0.95, 0.85]

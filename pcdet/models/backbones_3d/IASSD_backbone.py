@@ -83,7 +83,7 @@ class IASSD_Backbone(nn.Module):
                         confidence_mlp=confidence_mlp,
                         num_class = self.num_class,
                         use_pooling_weights=self.use_pooling_weight,
-                        euclidean_mask=self.euclidean_mask
+                        euclidean_mask=self.euclidean_mask[k]
                     )
                 )
 
