@@ -149,7 +149,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             frame_ids += list(batch_dict['frame_id'])
 
             if hasattr(model, 'vis'):
-                vis = model.vis
+                vis = True
             else:
                 vis = False
 
@@ -158,8 +158,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             else:
                 debug = False
             save_center = save_centers & ('centers' in batch_dict)
-            # import ipdb
-            # ipdb.set_trace()
+
             if save_center:
                 centers = batch_dict['centers'].cpu().numpy()
                 centers_origin = batch_dict['centers_origin'].cpu().numpy()
