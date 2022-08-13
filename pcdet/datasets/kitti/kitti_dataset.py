@@ -392,12 +392,11 @@ class KittiDataset(DatasetTemplate):
                                                     is_radar=self.is_radar))
         else:
             evaluation_result = {}
-            evaluation_result.update(
-                kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
-            evaluation_result.update(
-                kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
-                                                  is_radar=self.is_radar))
-
+            result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar)
+            evaluation_result.update(ap_dict)
+            self.logger.info(result_str)
+        # import ipdb
+        # ipdb.set_trace()
         return evaluation_result
 
     def __len__(self):

@@ -30,8 +30,8 @@ def get_thresholds(scores: np.ndarray, num_gt, num_sample_pts=41):
 
 def clean_data(gt_anno, dt_anno, current_class, difficulty, is_radar):
     CLASS_NAMES = ['car', 'pedestrian', 'cyclist', 'van', 'person_sitting', 'truck']
-    MIN_HEIGHT = [40, 40, 40]
-    MAX_OCCLUSION = [4, 4, 4]
+    MIN_HEIGHT = [40, 40, 40] # -> all 40
+    MAX_OCCLUSION = [2, 2, 2]
     MAX_TRUNCATION = [0.15, 0.3, 0.5]
     dc_bboxes, ignored_gt, ignored_dt = [], [], []
     current_cls_name = CLASS_NAMES[current_class].lower()
@@ -584,7 +584,7 @@ def do_eval(gt_annos,
             compute_aos=False,
             PR_detail_dict=None):
     # min_overlaps: [num_minoverlap, metric, num_class]
-    difficultys = [0]
+    difficultys = [0] 
     ret = eval_class(gt_annos, dt_annos, current_classes, difficultys, 0,
                      min_overlaps, compute_aos=compute_aos, is_radar=is_radar)
     # ret: [num_class, num_diff, num_minoverlap, num_sample_points]
@@ -637,23 +637,13 @@ def do_coco_style_eval(gt_annos, dt_annos, current_classes, overlap_ranges,
     return mAP_bbox, mAP_bev, mAP_3d, mAP_aos
 
 
-def get_official_eval_result(gt_annos, dt_annos, current_classes, is_radar, PR_detail_dict=None, custom_method=0):
-    if is_radar:
-        print('eval radar')
-        overlap_0_7 = np.array([[0.5, 0.25, 0.25, 0.5, 0.25, 0.25],
-                                [0.5, 0.25, 0.25, 0.5, 0.25, 0.25],
-                                [0.5, 0.25, 0.25, 0.5, 0.25, 0.25]])
-        overlap_0_5 = np.array([[0.5, 0.25, 0.25, 0.5, 0.25, 0.25],
-                                [0.5, 0.25, 0.25, 0.5, 0.25, 0.25],
-                                [0.5, 0.25, 0.25, 0.5, 0.25, 0.25]])
-    else:
-        print('eval lidar')
-        overlap_0_7 = np.array([[0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
-                                [0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
-                                [0.75, 0.5, 0.5, 0.7, 0.5, 0.7]])
-        overlap_0_5 = np.array([[0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
-                                [0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
-                                [0.75, 0.5, 0.5, 0.75, 0.5, 0.5]])
+def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict=None, is_radar=False):
+    overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7], 
+                            [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
+                            [0.7, 0.5, 0.5, 0.7, 0.5, 0.7]])
+    overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.5], 
+                            [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
+                            [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])
     min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
     class_to_name = {
         0: 'Car',
@@ -691,8 +681,38 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, is_radar, PR_d
         # mAP result: [num_class, num_diff, num_min_overlap]
         for i in range(1, 2):  # min_overlaps.shape[0]):
             if compute_aos:
-                if i == 1:
-                    ret_dict['%s_aos_all' % class_to_name[curcls]] = mAPaos[j, 0, 1]
+                result += print_str((f"aos  AP:{mAPaos_R40[j, 0, i]:.2f}, "
+                                    #  f"{mAPaos_R40[j, 1, i]:.2f}, "
+                                    #  f"{mAPaos_R40[j, 2, i]:.2f}"
+                                     ))
+                # if i == 0:
+                #    ret_dict['%s_aos/easy_R40' % class_to_name[curcls]] = mAPaos_R40[j, 0, 0]
+                #    ret_dict['%s_aos/moderate_R40' % class_to_name[curcls]] = mAPaos_R40[j, 1, 0]
+                #    ret_dict['%s_aos/hard_R40' % class_to_name[curcls]] = mAPaos_R40[j, 2, 0]
+
+            if i == 0:
+                # ret_dict['%s_3d/easy' % class_to_name[curcls]] = mAP3d[j, 0, 0]
+                # ret_dict['%s_3d/moderate' % class_to_name[curcls]] = mAP3d[j, 1, 0]
+                # ret_dict['%s_3d/hard' % class_to_name[curcls]] = mAP3d[j, 2, 0]
+                # ret_dict['%s_bev/easy' % class_to_name[curcls]] = mAPbev[j, 0, 0]
+                # ret_dict['%s_bev/moderate' % class_to_name[curcls]] = mAPbev[j, 1, 0]
+                # ret_dict['%s_bev/hard' % class_to_name[curcls]] = mAPbev[j, 2, 0]
+                # ret_dict['%s_image/easy' % class_to_name[curcls]] = mAPbbox[j, 0, 0]
+                # ret_dict['%s_image/moderate' % class_to_name[curcls]] = mAPbbox[j, 1, 0]
+                # ret_dict['%s_image/hard' % class_to_name[curcls]] = mAPbbox[j, 2, 0]
+
+                ret_dict['%s_3d/easy_R40' % class_to_name[curcls]] = mAP3d_R40[j, 0, 0]
+                # ret_dict['%s_3d/moderate_R40' % class_to_name[curcls]] = mAP3d_R40[j, 1, 0]
+                # ret_dict['%s_3d/hard_R40' % class_to_name[curcls]] = mAP3d_R40[j, 2, 0]
+                ret_dict['%s_bev/easy_R40' % class_to_name[curcls]] = mAPbev_R40[j, 0, 0]
+                # ret_dict['%s_bev/moderate_R40' % class_to_name[curcls]] = mAPbev_R40[j, 1, 0]
+                # ret_dict['%s_bev/hard_R40' % class_to_name[curcls]] = mAPbev_R40[j, 2, 0]
+                ret_dict['%s_image/easy_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 0, 0]
+                # ret_dict['%s_image/moderate_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 1, 0]
+                # ret_dict['%s_image/hard_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 2, 0]
+            
+            if compute_aos and i ==1:
+                ret_dict['%s_aos_all' % class_to_name[curcls]] = mAPaos[j, 0, 1]
 
             if i == 1:
                 ret_dict['%s_3d_all' % class_to_name[curcls]] = mAP3d[
@@ -700,13 +720,7 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, is_radar, PR_d
                 ret_dict['%s_bev_all' % class_to_name[curcls]] = mAPbev[
                     j, 0, 1]  # get j class, difficulty, second min_overlap
 
-    if custom_method == 0:
-        return {'entire_area': ret_dict}
-    elif custom_method == 3:
-        return {'roi': ret_dict}
-    else:
-        raise NotImplementedError
-    return result, ret_dict
+    return result, {'entire_area': ret_dict}
 
 
 def get_coco_eval_result(gt_annos, dt_annos, current_classes):

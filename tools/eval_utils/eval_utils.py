@@ -328,13 +328,16 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
           f"Car: {eval_results['entire_area']['Car_3d_all']} \n"
           f"Pedestrian: {eval_results['entire_area']['Pedestrian_3d_all']} \n"
           f"Cyclist: {eval_results['entire_area']['Cyclist_3d_all']} \n"
-          f"mAP: {(eval_results['entire_area']['Car_3d_all'] + eval_results['entire_area']['Pedestrian_3d_all'] + eval_results['entire_area']['Cyclist_3d_all']) / 3} \n"
-          f"Driving corridor area: \n"
+          f"mAP: {(eval_results['entire_area']['Car_3d_all'] + eval_results['entire_area']['Pedestrian_3d_all'] + eval_results['entire_area']['Cyclist_3d_all']) / 3}")
+    try:
+        logger.info("Driving corridor area: \n"
           f"Car: {eval_results['roi']['Car_3d_all']} \n"
           f"Pedestrian: {eval_results['roi']['Pedestrian_3d_all']} \n"
           f"Cyclist: {eval_results['roi']['Cyclist_3d_all']} \n"
           f"mAP: {(eval_results['roi']['Car_3d_all'] + eval_results['roi']['Pedestrian_3d_all'] + eval_results['roi']['Cyclist_3d_all']) / 3} \n"
           )
+    except KeyError:
+        pass
 
     current_epoch_mAP_3d = (eval_results['entire_area']['Car_3d_all'] + eval_results['entire_area']['Pedestrian_3d_all'] + eval_results['entire_area']['Cyclist_3d_all']) / 3
     eval_results['mAP_3d'] = current_epoch_mAP_3d
