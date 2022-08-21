@@ -2,7 +2,8 @@ from distutils.log import debug
 from genericpath import exists
 import pickle
 import time
-
+import matplotlib.pyplot as plt
+from vod.visualization.settings import label_color_palette_2d
 import numpy as np
 import torch
 import tqdm
@@ -81,7 +82,49 @@ def vis_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sav
         np.save(attach_fname, attach_pw_dict)
         np.save(main_fname, main_pw_dict)
 
-            
+
+def draw_all_iou_results(iou_thresholds,
+                car_AP,
+                pedestrian_AP,
+                cyclist_AP,result_dir):
+    fig, ax = plt.subplots(1)
+
+    car_color = label_color_palette_2d['Car']
+    ped_color = label_color_palette_2d['Pedestrian']
+    cyclist_color = label_color_palette_2d['Cyclist']
+
+    mAP = np.mean([car_AP,pedestrian_AP,cyclist_AP],axis=0)
+    
+    ax.scatter(iou_thresholds,car_AP,color=car_color,clip_on=False)
+    ax.scatter(iou_thresholds,pedestrian_AP,color=ped_color,clip_on=False)
+    ax.scatter(iou_thresholds,cyclist_AP,color=cyclist_color,clip_on=False)
+    ax.scatter(iou_thresholds,mAP,color='black',clip_on=False)
+    
+    ax.plot(iou_thresholds,car_AP,color=car_color,label='Car')
+    ax.plot(iou_thresholds,pedestrian_AP,color=ped_color,label='Pedestrian')
+    ax.plot(iou_thresholds,cyclist_AP,color=cyclist_color,label='Cyclist')
+    ax.plot(iou_thresholds,mAP,color='black',label='mAP')
+
+    ax.set_xlabel('IoU threshold (3D)')
+    ax.set_ylabel('AP (3D IoU)')
+
+    ax.set_yticks(np.arange(0,110,10))
+    ax.set_xticks(np.arange(0,1,0.1))
+    
+    ax.grid(axis = 'y')
+    
+    ax.legend()
+
+    for label in ax.get_yticklabels()[1::2]:
+        label.set_visible(False)
+
+    plt.ylim(ymin=0,ymax=100)
+    plt.xlim(xmin=0) 
+
+    fig_path = result_dir / 'iou_threshold.png'
+    fig.savefig(fig_path)
+    
+
 def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None,
                    runtime_gt=False, save_best_eval=False, best_mAP_3d=0.0, save_centers=False):
     result_dir.mkdir(parents=True, exist_ok=True)
@@ -365,8 +408,20 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
           f"Cyclist: {vod_evaluation_result['roi']['Cyclist_3d_all']} \n"
           f"mAP: {(vod_evaluation_result['roi']['Car_3d_all'] + vod_evaluation_result['roi']['Pedestrian_3d_all'] + vod_evaluation_result['roi']['Cyclist_3d_all']) / 3} \n"
           )
+    logger.info('*************   AP for different IoU thresholds   *************')
+    
+    iou_threshold = kitti_evaluation_result['entire_area']['iou_thresholds']
+    car_APs = kitti_evaluation_result['entire_area']['category_results']['Car']['mAP_3d']
+    pedestrian_APs = kitti_evaluation_result['entire_area']['category_results']['Pedestrian']['mAP_3d']
+    cyclist_APs = kitti_evaluation_result['entire_area']['category_results']['Cyclist']['mAP_3d']
+    logger.info(f"IoU thresholds: {iou_threshold}")
+    logger.info(f"Car APs: {car_APs}")
+    logger.info(f"Pedestrian APs: {pedestrian_APs}")
+    logger.info(f"Cyclist APs: {cyclist_APs}")
 
+    
 
+    draw_all_iou_results(iou_threshold,car_APs,pedestrian_APs,cyclist_APs,result_dir)
     current_epoch_mAP_3d = (vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
     ret_dict['mAP_3d'] = current_epoch_mAP_3d
     ret_dict['mAP_3d_kitti'] = (kitti_evaluation_result['entire_area']['Car_3d_all'] + kitti_evaluation_result['entire_area']['Pedestrian_3d_all'] + kitti_evaluation_result['entire_area']['Cyclist_3d_all']) / 3

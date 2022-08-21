@@ -639,6 +639,56 @@ def do_coco_style_eval(gt_annos, dt_annos, current_classes, overlap_ranges,
         mAP_aos = mAP_aos.mean(-1)
     return mAP_bbox, mAP_bev, mAP_3d, mAP_aos
 
+def get_all_iou_results(gt_annos,
+            dt_annos,
+            current_classes,
+            compute_aos=False,
+            PR_detail_dict=None):
+    difficulties = [0]
+
+    iou_threshold = np.expand_dims(np.array([[0.1, 0.1, 0.1, 0.1, 0.1, 0.1], 
+                            [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+                            [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]]),axis=0)
+    increment = np.expand_dims(np.array([[0.1, 0.1, 0.1, 0.1, 0.1, 0.1], 
+                            [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+                            [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]]),axis=0)
+    starting_iou = 0.1
+    category_results = {
+        'Car': {
+            'mAP_3d': [],
+            'mAP_3d_R40': []
+        },
+        'Pedestrian':{
+            'mAP_3d': [],
+            'mAP_3d_R40': []
+        },
+        'Cyclist':{
+            'mAP_3d': [],
+            'mAP_3d_R40': []
+        }
+    }
+
+    for i in range(9):        
+        print(i,starting_iou)
+        ret = eval_class(gt_annos, dt_annos, current_classes, difficulties, 2,
+                     iou_threshold)
+        mAP_3d = np.round(get_mAP(ret["precision"]),4)
+        mAP_3d_R40 = np.round(get_mAP_R40(ret["precision"]),4)
+
+        category_results["Car"]['mAP_3d'] += [mAP_3d[0].item()]
+        category_results["Car"]['mAP_3d_R40'] += [mAP_3d_R40[0].item()]
+                
+        category_results["Pedestrian"]['mAP_3d'] += [mAP_3d[1].item()]
+        category_results["Pedestrian"]['mAP_3d_R40'] += [mAP_3d_R40[1].item()]
+        
+        category_results["Cyclist"]['mAP_3d'] += [mAP_3d[2].item()]
+        category_results["Cyclist"]['mAP_3d_R40'] += [mAP_3d_R40[2].item()]
+
+        starting_iou += 0.1
+        iou_threshold += increment
+
+    return category_results
+
 
 def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict=None, is_radar=False):
     overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7], 
@@ -679,6 +729,11 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
         gt_annos, dt_annos, current_classes, min_overlaps, compute_aos, PR_detail_dict=PR_detail_dict)
 
     ret_dict = {}
+
+    category_results = get_all_iou_results(gt_annos,dt_annos,current_classes)
+    
+    ret_dict['category_results'] = category_results
+    ret_dict['iou_thresholds'] = list(np.round(np.arange(0.1,1,0.1),2))
     for j, curcls in enumerate(current_classes):
         # mAP threshold array: [num_minoverlap, metric, class]
         # mAP result: [num_class, num_diff, num_minoverlap]
