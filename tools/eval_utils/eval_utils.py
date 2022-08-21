@@ -2,6 +2,7 @@ from distutils.log import debug
 from genericpath import exists
 import pickle
 import time
+from turtle import distance
 import matplotlib.pyplot as plt
 from vod.visualization.settings import label_color_palette_2d
 import numpy as np
@@ -83,10 +84,14 @@ def vis_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sav
         np.save(main_fname, main_pw_dict)
 
 
-def draw_all_iou_results(iou_thresholds,
+def draw_iou_results(iou_thresholds,
                 car_AP,
                 pedestrian_AP,
-                cyclist_AP,result_dir):
+                cyclist_AP,
+                result_dir,
+                is_distance=False,
+                fig_name=None,
+                xlabel=None):
     fig, ax = plt.subplots(1)
 
     car_color = label_color_palette_2d['Car']
@@ -105,11 +110,16 @@ def draw_all_iou_results(iou_thresholds,
     ax.plot(iou_thresholds,cyclist_AP,color=cyclist_color,label='Cyclist')
     ax.plot(iou_thresholds,mAP,color='black',label='mAP')
 
-    ax.set_xlabel('IoU threshold (3D)')
+    if xlabel is not None:
+        ax.set_xlabel(xlabel) 
+    else:
+        ax.set_xlabel('IoU threshold (3D)') 
     ax.set_ylabel('AP (3D IoU)')
 
     ax.set_yticks(np.arange(0,110,10))
-    ax.set_xticks(np.arange(0,1,0.1))
+    
+    if not is_distance:
+        ax.set_xticks(np.arange(0,1,0.1))
     
     ax.grid(axis = 'y')
     
@@ -117,11 +127,15 @@ def draw_all_iou_results(iou_thresholds,
 
     for label in ax.get_yticklabels()[1::2]:
         label.set_visible(False)
+        plt.xlim(xmin=0) 
 
     plt.ylim(ymin=0,ymax=100)
-    plt.xlim(xmin=0) 
 
-    fig_path = result_dir / 'iou_threshold.png'
+    if fig_name is not None:
+        fig_path = result_dir / (fig_name+'.png')
+    else:
+        fig_path = result_dir / 'iou_threshold.png'
+
     fig.savefig(fig_path)
     
 
@@ -414,14 +428,42 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     car_APs = kitti_evaluation_result['entire_area']['category_results']['Car']['mAP_3d']
     pedestrian_APs = kitti_evaluation_result['entire_area']['category_results']['Pedestrian']['mAP_3d']
     cyclist_APs = kitti_evaluation_result['entire_area']['category_results']['Cyclist']['mAP_3d']
+    
     logger.info(f"IoU thresholds: {iou_threshold}")
     logger.info(f"Car APs: {car_APs}")
     logger.info(f"Pedestrian APs: {pedestrian_APs}")
     logger.info(f"Cyclist APs: {cyclist_APs}")
-
     
+    draw_iou_results(
+        iou_threshold,
+        car_APs,
+        pedestrian_APs,
+        cyclist_APs,
+        result_dir)
 
-    draw_all_iou_results(iou_threshold,car_APs,pedestrian_APs,cyclist_APs,result_dir)
+    logger.info('*************   AP(0.5,0.25,0.25) at different distances    *************')
+    distance_ranges = kitti_evaluation_result['entire_area']['distance_results']['distances']
+    car_APs = kitti_evaluation_result['entire_area']['distance_results']['Car']['mAP_3d']
+    pedestrian_APs = kitti_evaluation_result['entire_area']['distance_results']['Pedestrian']['mAP_3d']
+    cyclist_APs = kitti_evaluation_result['entire_area']['distance_results']['Cyclist']['mAP_3d']
+    
+    logger.info(f"Distance Ranges: {distance_ranges}")
+    logger.info(f"Car APs: {car_APs}")
+    logger.info(f"Pedestrian APs: {pedestrian_APs}")
+    logger.info(f"Cyclist APs: {cyclist_APs}")
+    
+    draw_iou_results(
+        distance_ranges,
+        car_APs,
+        pedestrian_APs,
+        cyclist_APs,
+        result_dir,
+        is_distance=True,
+        fig_name='distances',
+        xlabel="Distance from ego-vehicle")
+
+
+
     current_epoch_mAP_3d = (vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
     ret_dict['mAP_3d'] = current_epoch_mAP_3d
     ret_dict['mAP_3d_kitti'] = (kitti_evaluation_result['entire_area']['Car_3d_all'] + kitti_evaluation_result['entire_area']['Pedestrian_3d_all'] + kitti_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
