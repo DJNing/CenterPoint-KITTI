@@ -668,8 +668,7 @@ def get_all_iou_results(gt_annos,
         }
     }
 
-    for i in range(9):        
-        print(i,starting_iou)
+    for i in range(9):                
         ret = eval_class(gt_annos, dt_annos, current_classes, difficulties, 2,
                      iou_threshold)
         mAP_3d = np.round(get_mAP(ret["precision"]),4)
