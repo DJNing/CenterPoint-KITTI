@@ -10,6 +10,28 @@ from pcdet.datasets.kitti.kitti_object_eval_python.kitti_common import get_label
 from vod.visualization.settings import label_color_palette_2d
 import matplotlib.pyplot as plt
 
+def print_results(all_iou_results,distance_results):
+    print('*************   AP for different IoU thresholds   *************')
+    iou_threshold = all_iou_results['iou_thresholds']
+    car_APs = all_iou_results['Car']['mAP_3d']
+    pedestrian_APs = all_iou_results['Pedestrian']['mAP_3d']
+    cyclist_APs = all_iou_results['Cyclist']['mAP_3d']
+
+    print(f"IoU thresholds: {iou_threshold}")
+    print(f"Car APs: {car_APs}")
+    print(f"Pedestrian APs: {pedestrian_APs}")
+    print(f"Cyclist APs: {cyclist_APs}")
+
+    print('*************   AP(0.5,0.25,0.25) at different distances    *************')
+    distances = distance_results['distances']
+    car_APs = distance_results['Car']['mAP_3d']
+    pedestrian_APs = distance_results['Pedestrian']['mAP_3d']
+    cyclist_APs = distance_results['Cyclist']['mAP_3d']
+
+    print(f"Distance Ranges: {distances}")
+    print(f"Car APs: {car_APs}")
+    print(f"Pedestrian APs: {pedestrian_APs}")
+    print(f"Cyclist APs: {cyclist_APs}")
 
 def draw_iou_results(iou_thresholds,
                 car_AP,
@@ -170,53 +192,77 @@ def get_results_over_distance(gt_annos,
 
 
 
+def main():
+    path_dict = {
+        'CFAR_radar':'output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
+        'radar_rcsv':'output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint',
+        'radar_rcs':'output/IA-SSD-vod-radar/iassd_rcs/eval/best_epoch_checkpoint',
+        'radar_v':'output/IA-SSD-vod-radar/iassd_vcomp_only/eval/best_epoch_checkpoint',
+        'radar':'output/IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'lidar_i':'output/IA-SSD-vod-lidar/all_cls/eval/checkpoint_epoch_80',
+        'lidar':'output/IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'CFAR_lidar_rcsv':'output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint',
+        'CFAR_lidar_rcs':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_rcs_only/eval/best_epoch_checkpoint',
+        'CFAR_lidar_v':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_vcomp_only/eval/best_epoch_checkpoint',
+        'CFAR_lidar':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint'
+    }
+
+    for tag in path_dict.keys():
+        abs_path = P(__file__).parent.resolve()
+        base_path = abs_path.parents[1]
+        result_path = base_path / path_dict[tag]
+
+        print(f'*************   DRAWING PLOTS FOR TAG:{path_dict[tag]}   *************')
+
+        with open(str(result_path / 'gt.pkl'), 'rb') as f:
+            gt = pickle.load(f)
+
+        with open(str(result_path / 'dt.pkl'), 'rb') as f:
+            dt = pickle.load(f)
+
+        # Car, ped, cyclist 
+        current_classes = [0,1,2]
+        
+        # load gt boxes
+        new_gt = []
+        for key in gt.keys():
+            new_gt += [gt[key]] 
+
+        # load predicted boxes 
+        new_dt = []
+        for key in dt.keys():
+            new_dt += [dt[key][0]] 
+
+        # Calculate AP@[0.1,...,0.9]
+        all_iou_results = get_all_iou_results(new_gt,new_dt,current_classes)
+        
+        # Calculate AP@(0.5,0.25,0.25) 
+        # at range of distances [0,10],[10,20],[20,30],[30,40],[40,50]
+        distance_results = get_results_over_distance(new_gt,new_dt,current_classes)
+
+        # draw plots
+        draw_iou_results(all_iou_results['iou_thresholds'],
+                        all_iou_results['Car']['mAP_3d'],
+                        all_iou_results['Pedestrian']['mAP_3d'],
+                        all_iou_results['Cyclist']['mAP_3d'],
+                        result_path)
+
+        draw_iou_results(distance_results['distances'],
+                        distance_results['Car']['mAP_3d'],
+                        distance_results['Pedestrian']['mAP_3d'],
+                        distance_results['Cyclist']['mAP_3d'],
+                        result_path,
+                        is_distance=True,
+                        fig_name='distances',
+                        xlabel="Distance from ego-vehicle")
+
+        # print out the stuff 
+        print_results(all_iou_results,distance_results)
 
 
-test_path = 'output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint'
+if __name__ == "__main__":
+    main()
 
-abs_path = P(__file__).parent.resolve()
-base_path = abs_path.parents[1]
-result_path = base_path / test_path
-
-
-current_classes = [0,1,2]
-
-with open(str(result_path / 'gt.pkl'), 'rb') as f:
-    gt = pickle.load(f)
-
-# load det
-with open(str(result_path / 'dt.pkl'), 'rb') as f:
-    dt = pickle.load(f)
-
-new_gt = []
-for key in gt.keys():
-    temp_dict = {}
-    new_gt += [gt[key]] 
-
-new_dt = []
-for key in dt.keys():
-    temp_dict = {}
-    new_dt += [dt[key][0]] 
-
-
-
-all_iou_results = get_all_iou_results(new_gt,new_dt,current_classes)
-
-
-draw_iou_results(all_iou_results['iou_thresholds'],
-                all_iou_results['Car']['mAP_3d'],
-                all_iou_results['Pedestrian']['mAP_3d'],
-                all_iou_results['Cyclist']['mAP_3d'],
-                result_path)
-
-
-distance_results = get_results_over_distance(new_gt,new_dt,current_classes)
-                
-draw_iou_results(distance_results['distances'],
-                distance_results['Car']['mAP_3d'],
-                distance_results['Pedestrian']['mAP_3d'],
-                distance_results['Cyclist']['mAP_3d'],
-                result_path)
 
 
 
