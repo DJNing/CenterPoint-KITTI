@@ -29,8 +29,8 @@ DATA_CONFIG:
                 'test': False
             }
 
-USE_ATTACH: True
-FREEZE_MODE: head
+USE_ATTACH: False
+FREEZE_MODE: backbone
 MODEL:
     DEBUG: False
     NAME: IASSDGAN
