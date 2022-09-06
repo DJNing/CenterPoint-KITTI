@@ -14,10 +14,16 @@ class IASSD_GAN(Detector3DTemplate):
     def __init__(self, model_cfg, num_class, dataset, tb_log=None):
         super().__init__(model_cfg=model_cfg, num_class=num_class, dataset=dataset)
 
-        self.module_topology = [
-            'vfe', 'backbone_3d', 'map_to_bev_module', 'pfe',
-            'backbone_2d', 'feature_aug', 'dense_head',  'point_head', 'roi_head'
-        ]
+        if model_cfg.get('USE_FEAT_AUG', False):
+            self.module_topology = [
+                'vfe', 'backbone_3d', 'map_to_bev_module', 'pfe',
+                'backbone_2d', 'feature_aug', 'dense_head',  'point_head', 'roi_head'
+            ]
+        else:
+            self.module_topology = [
+                'vfe', 'backbone_3d', 'map_to_bev_module', 'pfe',
+                'backbone_2d', 'dense_head',  'point_head', 'roi_head'
+            ]
 
         self.module_list = self.build_networks()
         self.attach_module_topology = ['backbone_3d']
@@ -87,44 +93,68 @@ class IASSD_GAN(Detector3DTemplate):
         # for i in range(self.full_len):
         #     batch_dict = self.module_list[i](batch_dict)
         if self.training:
-            loss, tb_dict, disp_dict = self.get_training_loss()
+            if self.use_feature_aug:
+                loss, tb_dict, disp_dict = self.get_training_loss()
 
-            # get feat transfer loss
+                # get feat transfer loss
 
 
-            transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
-            disp_dict['det_loss'] = loss.item()
-            disp_dict['matching_loss'] = tb_dict['matching_loss']
-            loss = (transfer_loss + loss) / 2
-            tb_keys = ['center_loss_cls', 'center_loss_box', 'corner_loss_reg']
+                transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
+                disp_dict['det_loss'] = loss.item()
+                disp_dict['matching_loss'] = tb_dict['matching_loss']
+                loss = (transfer_loss + loss) / 2
+                tb_keys = ['center_loss_cls', 'center_loss_box', 'corner_loss_reg']
 
-            ret_dict = {
-                'loss': loss,
-                'gan_loss': transfer_loss
-            }
-            disp_dict['gan_loss'] = transfer_loss.item()
-            disp_dict['tatal_loss'] = loss.item()
+                ret_dict = {
+                    'loss': loss,
+                    'gan_loss': transfer_loss
+                }
+                disp_dict['gan_loss'] = transfer_loss.item()
+                disp_dict['tatal_loss'] = loss.item()
 
-            shared_det_list = []
-            det_list = []
-            for k in tb_keys:
-                shared_det_list += [shared_tb_dict[k]]
-                det_list += [tb_dict[k]]
+                shared_det_list = []
+                det_list = []
+                for k in tb_keys:
+                    shared_det_list += [shared_tb_dict[k]]
+                    det_list += [tb_dict[k]]
 
-            disp_dict['shared_box_loss'] = sum(shared_det_list)
-            disp_dict['box_loss'] = sum(det_list)
-            tb_dict['shared_box_loss'] = sum(shared_det_list)
-            tb_dict['box_loss'] = sum(det_list)
-            # tb_dict ===> tensorboard_dict
-            # for k in transfer_disp_dict:
-            #     disp_dict[k] = transfer_disp_dict[k].item()
-                # tb_dict[k] = transfer_disp_dict[k].item()
-            # TODO: draw 
+                disp_dict['shared_box_loss'] = sum(shared_det_list)
+                disp_dict['box_loss'] = sum(det_list)
+                tb_dict['shared_box_loss'] = sum(shared_det_list)
+                tb_dict['box_loss'] = sum(det_list)
+                # tb_dict ===> tensorboard_dict
+                # for k in transfer_disp_dict:
+                #     disp_dict[k] = transfer_disp_dict[k].item()
+                    # tb_dict[k] = transfer_disp_dict[k].item()
+                # TODO: draw 
 
-            # for k in tb_keys:
-            #     shared_name = 'shared_' + k
-            #     tb_dict[shared_name] = shared_tb_dict[k]
+                # for k in tb_keys:
+                #     shared_name = 'shared_' + k
+                #     tb_dict[shared_name] = shared_tb_dict[k]
+            else:
+                loss, tb_dict, disp_dict = self.get_training_loss()
+                transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
+                disp_dict['det_loss'] = loss.item()
+                loss = (transfer_loss + loss) / 2
+                tb_keys = ['center_loss_cls', 'center_loss_box', 'corner_loss_reg']
 
+                ret_dict = {
+                    'loss': loss,
+                    'gan_loss': transfer_loss
+                }
+                disp_dict['gan_loss'] = transfer_loss.item()
+                disp_dict['tatal_loss'] = loss.item()
+
+                shared_det_list = []
+                det_list = []
+                for k in tb_keys:
+                    shared_det_list += [shared_tb_dict[k]]
+                    det_list += [tb_dict[k]]
+
+                disp_dict['shared_box_loss'] = sum(shared_det_list)
+                disp_dict['box_loss'] = sum(det_list)
+                tb_dict['shared_box_loss'] = sum(shared_det_list)
+                tb_dict['box_loss'] = sum(det_list)
 
             return ret_dict, tb_dict, disp_dict
         else:
@@ -400,7 +430,7 @@ class IASSD_GAN(Detector3DTemplate):
         }
         if self.cross_over_cfg is None:
             transfer_loss = self.transfer(transfer_dict)
-        elif self.feature_aug is not None:
+        elif self.use_feature_aug:
             # feature matching loss is already calculated in get_training_loss(), 
             # here we only calculate the shared_det_loss
             radar_shared_feat = batch_dict['radar_shared']
@@ -540,7 +570,7 @@ class IASSD_GAN(Detector3DTemplate):
             loss_point, tb_dict = self.point_head.get_loss()
             tb_dict['pts_dict'] = pts_dict
             return loss_match, tb_dict, disp_dict
-        else:
+        elif self.use_feature_aug:
             loss_point, tb_dict = self.point_head.get_loss()
             loss_match, new_tb_dict = self.feature_aug.get_loss()
 
@@ -549,6 +579,10 @@ class IASSD_GAN(Detector3DTemplate):
 
             tb_dict.update(new_tb_dict)
             loss = (2/3) * loss_point + (1/3) * loss_match
+            return loss, tb_dict, disp_dict
+        else:
+            loss_point, tb_dict = self.point_head.get_loss()
+            loss = loss_point
             return loss, tb_dict, disp_dict
         
 

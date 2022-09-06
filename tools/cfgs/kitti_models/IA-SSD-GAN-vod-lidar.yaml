@@ -29,11 +29,44 @@ DATA_CONFIG:
                 'test': False
             }
 
-USE_ATTACH: False
+USE_ATTACH: True
 FREEZE_MODE: head
 MODEL:
     DEBUG: False
     NAME: IASSDGAN
+    ATTACH_NETWORK:
+        CKPT_FILE: "../output/IA-SSD-vod-radar/iassd_vcomp_only/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth"
+        NUM_POINT_FEATURES: 4
+        BACKBONE_3D:
+            NAME: IASSD_Backbone
+            # ========= for evaluation only ==========
+            # SAVE_FEAT_DIR: '/mnt/sda1/hantao/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/inter_feats/attach'
+            # ========================================
+            SA_CONFIG:
+                NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]
+                SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
+                SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
+                # Group and Abstraction setting:
+                RADIUS_LIST: [[0.2,0.8], [0.8,1.6], [1.6,4.8], [], [], [4.8, 6.4]]
+                NSAMPLE_LIST: [[16,32], [16,32], [16,32], [], [], [16, 32]]            
+                MLPS: [[[16,16,32],  [32,32,64]],
+                    [[64,64,128],  [64,96,128]],
+                    [[128,128,256],  [128,256,256]],
+                    [],
+                    [128],
+                    [[256,256,512], [256,512,1024]]]
+                
+                LAYER_TYPE: ['SA_Layer', 'SA_Layer', 'SA_Layer', 'SA_Layer', 'Vote_Layer', 'SA_Layer']
+                DILATED_GROUP: [False, False, False, False, False, False]            
+                AGGREGATION_MLPS: [[64], [128], [256], [256], [], [512]]
+                # Instance-aware setting:
+                CONFIDENCE_MLPS: [[], [128], [256], [], [], []]
+                EUCLIDEAN_MASK: [False, False, False, False, False, False]       
+                LAYER_INPUT: [0, 1, 2, 3, 4, 3]
+                CTR_INDEX: [-1, -1, -1, -1, -1, 5]
+                MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
+                # SAVE_SAMPLE_LIST: True
+                # SAVE_SAMPLE_LIST: True
     CROSS_OVER:
         CH_IN: 512
         MLPS: [448, 384, 320, 256]
@@ -87,6 +120,8 @@ MODEL:
 
 
     USE_FEAT_AUG: False
+    # FEAT_AUG: 
+    #     NAME: MLP_AUG
     FEAT_AUG:
         CH_IN: 512
         MLPS: [448, 384, 320, 256]
