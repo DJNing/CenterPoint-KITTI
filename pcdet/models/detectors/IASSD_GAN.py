@@ -133,27 +133,26 @@ class IASSD_GAN(Detector3DTemplate):
                 #     tb_dict[shared_name] = shared_tb_dict[k]
             else:
                 loss, tb_dict, disp_dict = self.get_training_loss()
-                transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
+                # transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
                 disp_dict['det_loss'] = loss.item()
-                loss = (transfer_loss + loss) / 2
+                # loss = (transfer_loss + loss) / 2
                 tb_keys = ['center_loss_cls', 'center_loss_box', 'corner_loss_reg']
 
                 ret_dict = {
-                    'loss': loss,
-                    'gan_loss': transfer_loss
+                    'loss': loss
                 }
-                disp_dict['gan_loss'] = transfer_loss.item()
+                # disp_dict['gan_loss'] = transfer_loss.item()
                 disp_dict['tatal_loss'] = loss.item()
 
-                shared_det_list = []
+                # shared_det_list = []
                 det_list = []
                 for k in tb_keys:
-                    shared_det_list += [shared_tb_dict[k]]
+                    # shared_det_list += [shared_tb_dict[k]]
                     det_list += [tb_dict[k]]
 
-                disp_dict['shared_box_loss'] = sum(shared_det_list)
+                # disp_dict['shared_box_loss'] = sum(shared_det_list)
                 disp_dict['box_loss'] = sum(det_list)
-                tb_dict['shared_box_loss'] = sum(shared_det_list)
+                # tb_dict['shared_box_loss'] = sum(shared_det_list)
                 tb_dict['box_loss'] = sum(det_list)
 
             return ret_dict, tb_dict, disp_dict
