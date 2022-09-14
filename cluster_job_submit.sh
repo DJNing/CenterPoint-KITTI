@@ -128,12 +128,19 @@ rsync --archive --update --compress --progress ${src_path}/ ${dest_path}
 # inclusive.
 
 cd $repo_home
-ln -s ${dest_path}/lidar ${repo_home}/data/vod_lidar
-ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
-python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_radar_dataset.yaml
+#ln -s ${dest_path}/lidar ${repo_home}/data/vod_lidar
+#ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
+# python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_lidar_dataset.yaml
+# python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_radar_dataset.yaml
+python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_radar_dataset_iassd_car.yaml
 cd ./tools
-python train.py --cfg_file cfgs/kitti_models/pointpillar_vod_radar.yaml --epoch 5 --workers 8 --extra_tag test --batch_size 16 --eval_save True --eval_epoch 1
-
+# python train.py --cfg_file cfgs/kitti_models/IA-SSD-vod-radar.yaml --epoch 80 --workers 8 --extra_tag points1024radar_scaleSA --batch_size 16 --eval_save True --eval_epoch 2
+# python train.py --cfg_file cfgs/kitti_models/IA-SSD-GAN-vod-aug.yaml --epoch 40 --workers 8 --extra_tag points1024-scaleSA --batch_size 8 --eval_save True --eval_epoch 1 --pretrained_model ../output/IA-SSD-vod-radar/iassd_best_aug_new/checkpoint_epoch_36.pth
+# python train.py --cfg_file cfgs/kitti_models/IA-SSD-GAN-vod-lidar.yaml --epoch 40 --workers 8 --extra_tag nofeataug_freeze_head --batch_size 8 --eval_save True --eval_epoch 1 --pretrained_model ../output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth
+# python train.py --cfg_file cfgs/kitti_models/IA-SSD-vod-lidar-freeze.yaml --epoch 40 --workers 8 --extra_tag freeze_backbone --batch_size 8 --eval_save True --eval_epoch 1 --pretrained_model ../output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth
+python train.py --cfg_file cfgs/kitti_models/IA-SSD-GAN-vod-aug-car.yaml --epoch 80 --workers 8 --extra_tag car_only --batch_size 8 --eval_save True --eval_epoch 1
+# python train.py --cfg_file cfgs/kitti_models/IA-SSD-vod-radar-car.yaml --epoch 80 --workers 8 --extra_tag car_only --batch_size 8 --eval_save True --eval_epoch 1
+# python train.py --cfg_file cfgs/kitti_models/IA-SSD-vod-radar-car.yaml --epoch 80 --workers 8 --extra_tag car_only_xavier --batch_size 8 --eval_save True --eval_epoch 1
 
 # ======================================
 # Move output data from scratch to DFS

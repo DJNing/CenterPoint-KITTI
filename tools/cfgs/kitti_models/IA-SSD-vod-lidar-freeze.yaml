@@ -1,18 +1,17 @@
-# Car only config
-# Hnatao Zhong 09/09-2022
-CLASS_NAMES: ['Car']
+CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
+# CLASS_NAMES: ['Car']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: tools/cfgs/dataset_configs/vod_radar_dataset_iassd_car.yaml
-
+    _BASE_CONFIG_: tools/cfgs/dataset_configs/vod_lidar_dataset.yaml
+    USE_VOD_EVAL: True
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
             REMOVE_OUTSIDE_BOXES: True
 
         -   NAME: sample_points
             NUM_POINTS: {
-                'train': 512, # using waymo config
-                'test': 512
+                'train': 80000, # using waymo config
+                'test': 80000
             }
 
         -   NAME: shuffle_points
@@ -20,18 +19,8 @@ DATA_CONFIG:
                 'train': True,
                 'test': False
             }
-    # DATA_AUGMENTOR:
-    #     DISABLE_AUG_LIST: ['placeholder']
-    #     # - NAME: random_world_flip
-    #     #   ALONG_AXIS_LIST: ['x']
-    #     POINT_FEATURE_ENCODING: {
-    #     encoding_type: absolute_coordinates_encoding,
-    #     used_feature_list: ['x', 'y', 'z', 'RCS', 'v_r_compensated'],
-    #     src_feature_list: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time'],
-    #     }
-        #     - NAME: random_world_scaling
-        #       WORLD_SCALE_RANGE: [0.95, 1.05]
 
+FREEZE_MODE: head
 MODEL:
     NAME: IASSD
      
@@ -39,7 +28,7 @@ MODEL:
         NAME: IASSD_Backbone
         SA_CONFIG:
             # Sampling setting:
-            NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]
+            NPOINT_LIST: [[4096], [1024], [512], [256], [-1], [256]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
             SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
             # Group and Abstraction setting:
@@ -130,11 +119,11 @@ MODEL:
 
 OPTIMIZATION:
     BATCH_SIZE_PER_GPU: 8
-    NUM_EPOCHS: 80
+    NUM_EPOCHS: 100
 
     OPTIMIZER: adam_onecycle
     LR: 0.01
-    WEIGHT_DECAY: 0.01
+    WEIGHT_DECAY: 0.02
     MOMENTUM: 0.9
 
     MOMS: [0.95, 0.85]

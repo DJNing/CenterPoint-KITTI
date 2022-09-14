@@ -1,4 +1,4 @@
-sbatch -N 1 -n 1 --mem=16000 --nodelist=damnii07 \
+sbatch -N 1 -n 1 --mem=16000 \
 --time 04:00:00 \
 --cpus-per-task=8 \
 --gres=gpu:1 \
