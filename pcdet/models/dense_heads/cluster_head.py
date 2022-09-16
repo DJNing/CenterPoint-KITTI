@@ -169,46 +169,13 @@ class Cluster_Head(PointHeadTemplate):
             = at the starting phase, we may end up with no fg pts in gt box
             =====================================
             '''
+            # get fg points and idxs
             box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
                 points_single.unsqueeze(dim=0), bbox_get_pts[k:k + 1, :, 0:7].contiguous()
             ).long().squeeze(dim=0)
-            box_fg_flag = (box_idxs_of_pts >= 0)
-
-            if use_query_assign: ##
-                centers = gt_boxes[k:k + 1, :, 0:3]
-                query_idxs_of_pts = roiaware_pool3d_utils.points_in_ball_query_gpu(
-                    points_single.unsqueeze(dim=0), centers.contiguous(), central_radii
-                    ).long().squeeze(dim=0) 
-                query_fg_flag = (query_idxs_of_pts >= 0)
-                if fg_pc_ignore:
-                    fg_flag = query_fg_flag ^ box_fg_flag 
-                    extend_box_idxs_of_pts[box_idxs_of_pts!=-1] = -1
-                    box_idxs_of_pts = extend_box_idxs_of_pts
-                else:
-                    fg_flag = query_fg_flag
-                    box_idxs_of_pts = query_idxs_of_pts
-            elif use_ex_gt_assign: ##
-                # reverse yaw angle
-                # =====================================
-                bbox_get_pts = torch.clone(extend_gt_boxes)
-                bbox_get_pts[:,:,6] = -bbox_get_pts[:,:,6] # this works from time to time
-                # =====================================
-                extend_box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
-                    points_single.unsqueeze(dim=0), bbox_get_pts[k:k+1, :, 0:7].contiguous()
-                ).long().squeeze(dim=0)
-                extend_fg_flag = (extend_box_idxs_of_pts >= 0)
-                
-                extend_box_idxs_of_pts[box_fg_flag] = box_idxs_of_pts[box_fg_flag] #instance points should keep unchanged
-
-                if fg_pc_ignore:
-                    fg_flag = extend_fg_flag ^ box_fg_flag
-                    extend_box_idxs_of_pts[box_idxs_of_pts!=-1] = -1
-                    box_idxs_of_pts = extend_box_idxs_of_pts
-                else:
-                    fg_flag = extend_fg_flag 
-                    box_idxs_of_pts = extend_box_idxs_of_pts 
+            box_fg_flag = (box_idxs_of_pts >= 0) 
                                 
-            elif set_ignore_flag: 
+            if set_ignore_flag: 
                 # reverse yaw angle
                 # =====================================
                 bbox_get_pts = torch.clone(extend_gt_boxes)
@@ -220,21 +187,18 @@ class Cluster_Head(PointHeadTemplate):
                 fg_flag = box_fg_flag
                 ignore_flag = fg_flag ^ (extend_box_idxs_of_pts >= 0)
                 point_cls_labels_single[ignore_flag] = -1
-
-            elif use_ball_constraint: 
-                box_centers = gt_boxes[k][box_idxs_of_pts][:, 0:3].clone()
-                box_centers[:, 2] += gt_boxes[k][box_idxs_of_pts][:, 5] / 2
-                ball_flag = ((box_centers - points_single).norm(dim=1) < central_radius)
-                fg_flag = box_fg_flag & ball_flag
-
             else:
                 raise NotImplementedError
-            # boxes of fg points
+
+            # assign boxes idx to fg points, e.g. Nx1 points -> Nxdim boxes
             gt_box_of_fg_points = gt_boxes[k][box_idxs_of_pts[fg_flag]]
+
+
             # assign class label to points
             point_cls_labels_single[fg_flag] = 1 if self.num_class == 1 or binary_label else gt_box_of_fg_points[:, -1].long()
-            point_cls_labels[bs_mask] = point_cls_labels_single 
+            point_cls_labels[bs_mask] = point_cls_labels_single # consist of value -1, 0, 1, as ignored, bg, fg
             bg_flag = (point_cls_labels_single == 0) # except ignore_id
+
             # box_bg_flag
             # ==============================================================
             # add box_bg_points to gt_box_of_fg_points

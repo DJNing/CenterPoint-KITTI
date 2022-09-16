@@ -36,8 +36,8 @@ MODEL:
     DEBUG: False
     NAME: IASSDGAN
     ATTACH_NETWORK:
-        CKPT_FILE: "output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth"
-        NUM_POINT_FEATURES: 5
+        CKPT_FILE: "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth"
+        NUM_POINT_FEATURES: 4
         BACKBONE_3D:
             NAME: IASSD_Backbone
             # ========= for evaluation only ==========
@@ -78,7 +78,7 @@ MODEL:
         # ========================================
         SA_CONFIG:
             # Sampling setting:
-            NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]
+            NPOINT_LIST: [[768], [768], [256], [128], [-1], [128]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
             SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
             # Group and Abstraction setting:
@@ -96,12 +96,10 @@ MODEL:
             AGGREGATION_MLPS: [[64], [128], [256], [256], [], [512]]
             # Instance-aware setting:
             CONFIDENCE_MLPS: [[], [128], [256], [], [], []]
-            EUCLIDEAN_MASK: [False, False, False, False, False, False]       
+
             LAYER_INPUT: [0, 1, 2, 3, 4, 3]
             CTR_INDEX: [-1, -1, -1, -1, -1, 5]
             MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
-            # SAVE_SAMPLE_LIST: True
-            # SAVE_SAMPLE_LIST: True
 
         FUSION_CONFIG:      
             NPOINT_LIST: [[256]]

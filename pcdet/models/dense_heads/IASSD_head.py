@@ -451,6 +451,9 @@ class IASSD_Head(PointHeadTemplate):
             center_loss_reg, tb_dict_3 = self.get_vote_loss_loss() # center assign
         tb_dict.update(tb_dict_3)
 
+        # multilayer vote loss
+        
+
         # semantic loss in SA layers
         if self.model_cfg.LOSS_CONFIG.get('LOSS_INS', None) is not None:
             assert ('sa_ins_preds' in self.forward_ret_dict) and ('sa_ins_labels' in self.forward_ret_dict)

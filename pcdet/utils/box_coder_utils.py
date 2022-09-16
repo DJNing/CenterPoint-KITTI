@@ -298,9 +298,16 @@ class PointResidual_BinOri_Coder(object):
             yg = yt * diagonal + ya
             zg = zt * dza + za
 
+            dxt = torch.clamp(dxt, max=1.2)
+            dyt = torch.clamp(dyt, max=1.2)
+            dzt = torch.clamp(dzt, max=1.2)
+
             dxg = torch.exp(dxt) * dxa
             dyg = torch.exp(dyt) * dya
             dzg = torch.exp(dzt) * dza
+            if max([max(dxg), max(dyg), max(dzg)]) > 1e3:
+
+                print(max(dxg), max(dyg), max(dzg))
         else:
             xg = xt + xa
             yg = yt + ya

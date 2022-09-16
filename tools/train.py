@@ -129,7 +129,7 @@ def main():
     model.cuda()
     
     optimizer = build_optimizer(model, cfg.OPTIMIZATION)
-
+    torch.autograd.set_detect_anomaly(True)
     # load checkpoint if it is possible
     start_epoch = it = 0
     last_epoch = -1

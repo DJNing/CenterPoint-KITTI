@@ -39,7 +39,7 @@ MODEL:
     NAME: IASSDGAN
     ATTACH_NETWORK:
         CKPT_FILE: "output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth"
-        NUM_POINT_FEATURES: 4
+        NUM_POINT_FEATURES: 3
         BACKBONE_3D:
             NAME: IASSD_Backbone
             # ========= for evaluation only ==========

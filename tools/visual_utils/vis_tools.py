@@ -13,6 +13,50 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle as Rec
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from skimage import io
+from matplotlib.transforms import Affine2D
+
+def fov_filtering(pts, frame_id, is_radar=True, is_test=False):
+    modality = 'radar' if is_radar else 'lidar'
+    split = 'testing' if is_test else 'training'
+
+    img_file = "/root/dj/code/CenterPoint-KITTI/data/vod_%s/%s/image_2/%s.jpg"%(modality, split, frame_id)
+    # assert img_file.exists(), f"failed on {idx}, img file = {img_file}"
+    img_shape = np.array(io.imread(img_file).shape[:2], dtype=np.int32)
+
+    calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_%s/%s/calib/%s.txt"%(modality, split, frame_id)
+    calib = calibration_kitti.Calibration(calib_path)
+    pts_rect = calib.lidar_to_rect(pts[:, 0:3])
+    fov_flag = get_fov_flag(pts_rect, img_shape, calib)
+    pts_fov = pts[fov_flag]
+    return pts_fov
+
+def get_img_file(frame_id, is_radar=True, is_test=False):
+    modality = 'radar' if is_radar else 'lidar'
+    split = 'testing' if is_test else 'training'
+
+    img_file = "/root/dj/code/CenterPoint-KITTI/data/vod_%s/%s/image_2/%s.jpg"%(modality, split, frame_id)
+    # assert img_file.exists(), f"failed on {idx}, img file = {img_file}"
+    # img = cv2.imread(img_file)
+    return img_file
+
+def get_fov_flag(pts_rect, img_shape, calib):
+    """
+    Args:
+        pts_rect:
+        img_shape:
+        calib:
+
+    Returns:
+
+    """
+    pts_img, pts_rect_depth = calib.rect_to_img(pts_rect)
+    val_flag_1 = np.logical_and(pts_img[:, 0] >= 0, pts_img[:, 0] < img_shape[1])
+    val_flag_2 = np.logical_and(pts_img[:, 1] >= 0, pts_img[:, 1] < img_shape[0])
+    val_flag_merge = np.logical_and(val_flag_1, val_flag_2)
+    pts_valid_flag = np.logical_and(val_flag_merge, pts_rect_depth >= 0)
+
+    return pts_valid_flag
 
 
 def transform_anno(loc, frame_id, is_radar=True, is_test=False):
@@ -101,9 +145,13 @@ def anno2plt(anno, color_dict, lw, frame_id, xz=False, is_radar=True, is_test=Fa
         rec_list += [Rec((ax, ay), l, w, ang, fill=False, color=color,lw=lw)]
     return rec_list
 
+def rotate_legend(ax, legends, degree):
+    tr = Affine2D().rotate_deg(degrees=degree) + ax.transData
+    for l in legends:
+        l.set_transform(tr)
+    
 
-
-def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends=[], is_radar=True, is_test=False):
+def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends=[], is_radar=True, is_test=False, swap_axis=True):
 
 
     # 3. draw bbx
@@ -131,6 +179,18 @@ def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends
         legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
                           markerfacecolor='r', markersize=10)]
     legend_elements += ext_legends
+
+    if swap_axis:
+        rotate_legend(ax, legend_elements, -90)
+    # if swap_axis:
+    #     # get data from first line of the plot
+    #     newx = ax.lines[0].get_ydata()
+    #     newy = ax.lines[0].get_xdata()
+
+    #     # set new x- and y- data for the line
+    #     ax.lines[0].set_xdata(newx)
+    #     ax.lines[0].set_ydata(newy)
+    
     ax.legend(handles=legend_elements, loc=1)
     ax.set_title(ax_title)
 
@@ -140,17 +200,20 @@ def draw_rectangle(ax, anno, color_dict, xz=False):
     for rec in recs:
         ax.add_patch(rec)
 
-def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, title='pred', limit_range=None, is_test=False):
+def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, title='pred', limit_range=None, is_test=False, fov_filter=True, swap_axis=True):
     print('=================== drawing images ===================')
     plt.rcParams['figure.dpi'] = 150
     for fid in tqdm(frame_ids):
         pcd_fname = data_path / (fid + '.bin')
         vis_pcd = get_radar(pcd_fname) if is_radar else get_lidar(pcd_fname, limit_range=limit_range)
+        if fov_filter:
+            vis_pcd = fov_filtering(vis_pcd, fid, is_radar, is_test)
+        else:
+            pass
         vis_pcd = pcd_formating(vis_pcd)
         ax = plt.gca()
-        drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title, is_radar=is_radar, is_test=is_test)
-        plt.xlim(-0,75)
-        plt.ylim(-30,30)
+        drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title, is_radar=is_radar, is_test=is_test, swap_axis=swap_axis)
+        
         img_fname = img_path / (fid + '.png')
         plt.savefig(str(img_fname))
         plt.cla()

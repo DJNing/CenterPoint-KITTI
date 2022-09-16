@@ -11,7 +11,6 @@ import cv2
 from pcdet.utils import calibration_kitti
 
 root_dir = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod/domain_cross_init_car/eval/eval_with_train/epoch_80/val')
-# root_dir = P('/root/dj/code/CenterPoint-KITTI/output/pointpillar_vod_radar/fixed_eval/eval/eval_with_train/epoch_100/val')
 frame_ids = root_dir / 'frame_ids.txt'
 frame_ids = np.loadtxt(frame_ids, delimiter=',', dtype=str)
 dt_annos = []
@@ -28,13 +27,8 @@ with open(gt_file, 'rb') as f:
     infos = pickle.load(f)
     gt_annos.extend(infos)
 
-
-
-
-
-# radar_pcd_path = P('/root/data/public/shangqi/data_0401/radar/kitti_format/radar')
-# radar_pcd_path = P('/mnt/f/Projects/CenterPoint-KITTI/data/kitti/training/velodyne')
 radar_pcd_path = P('/root/dj/code/CenterPoint-KITTI/data/vod_radar/training/velodyne')
+
 def transform_anno(loc, frame_id):
     x,y, z = loc[0], loc[1], loc[2]
     calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_radar/training/calib/{0}.txt".format(frame_id)
@@ -45,13 +39,13 @@ def transform_anno(loc, frame_id):
     return x,y,z
 
 def process_angle(r):
-    # rotation transforme to lidar
-    # r = r + np.pi / 2
+
     r = -r
     if r > np.pi:
         r = r - np.pi * 2
     elif r < -np.pi:
         r = r + np.pi * 2
+
     return r
 
 def getpcd(fname):
@@ -69,12 +63,8 @@ def anno2plt(anno, color, lw, frame_id, xz=False):
         else:
             x, y, _ = transform_anno(loc[idx], frame_id)
             w, l, _ = dim[idx]
-            # ang = process_angle(angle[idx])
-            # ang = process_angle(angle[idx])
             ang = -angle[idx]
-        # ax = x - w/2
-        # ay = y - l/2
-        # rec_list += [Rec((xx, ay), w, l, ang, fill=False, color=color,lw=lw)]
+
         rec_list += [Rec((x, y), w, l, ang, fill=False, color=color,lw=lw)]
     return rec_list
 
@@ -103,22 +93,16 @@ def drawBEV(pcd_fname, dt_anno, gt_anno, save_name, cur_id, xz=False):
         plt.gca().add_patch(gt_rec)
     plt.savefig(save_name)
 
-# test
-# cur_id = frame_ids[0]
-# cur_bin = str(radar_pcd_path/ (cur_id+'.bin'))
-# dt_anno = dt_annos[0]
-# gt_anno = gt_annos[0]
+
 save_dir = root_dir/'bev_img_filtered2'
 save_dir.mkdir(exist_ok=True)
+
 
 plt.figure()
 from tqdm import tqdm
 for idx in tqdm(range(len(frame_ids))):
     cur_id = frame_ids[idx]
-    # if cur_id == '1642484773700':
-    #     print('sth')
     cur_bin = str(radar_pcd_path/(cur_id + '.bin'))
-    # print(cur_bin)
     try:
         dt_anno = dt_annos[idx]
         gt_anno = gt_annos[idx]
