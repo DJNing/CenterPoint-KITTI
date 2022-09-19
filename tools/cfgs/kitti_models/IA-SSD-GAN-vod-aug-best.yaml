@@ -1,9 +1,8 @@
-# Car only config
-# Hnatao Zhong 09/09-2022
-CLASS_NAMES: ['Car']
+# CLASS_NAMES: ['Car', 'Truck']
+CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: tools/cfgs/dataset_configs/vod_radar_dataset_iassd_car.yaml
+    _BASE_CONFIG_: tools/cfgs/dataset_configs/vod_radar_dataset_iassd.yaml
     # TODO: handle data_processor base on different modality
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
@@ -248,7 +247,7 @@ OPTIMIZATION:
     # try to lower the LR for fine-tuning, 
     # we should obtain the best performance within 20 epoches
     # If we want to train from scratch, increase the LR together with the LR_DECAY
-    LR: 0.005
+    LR: 0.001
     WEIGHT_DECAY: 0.01
     MOMENTUM: 0.9
 
@@ -256,7 +255,7 @@ OPTIMIZATION:
     PCT_START: 0.4
     DIV_FACTOR: 10
     DECAY_STEP_LIST: [35, 45]
-    LR_DECAY: 0.1
+    LR_DECAY: 0.01
     LR_CLIP: 0.0000001
 
     LR_WARMUP: False

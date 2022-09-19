@@ -4,8 +4,10 @@ import pickle
 from pathlib import Path as P
 from matplotlib.patches import Rectangle as Rec
 import numpy as np
-import sys
-sys.path.append("/Users/gabrielchan/Desktop/code/CenterPoint-KITTI")
+from tqdm import tqdm
+from vod import frame
+# import sys
+# sys.path.append("/Users/gabrielchan/Desktop/code/CenterPoint-KITTI")
 # from pcdet.utils import calibration_kitti
 from vod.visualization.settings import label_color_palette_2d
 from vod.configuration import KittiLocations
@@ -15,6 +17,9 @@ import open3d as o3d
 from scipy.spatial.transform import Rotation as R
 from vod.visualization import Visualization3D
 from skimage import io
+from vis_tools import fov_filtering, make_vid
+from glob import glob
+
 # from vis_tools import fov_filtering
 
 
@@ -64,10 +69,12 @@ def vod_to_o3d(vod_bbx,vod_calib):
     # modality = 'radar' if is_radar else 'lidar'
     # split = 'testing' if is_test else 'training'    
     
+
+    
     COLOR_PALETTE = {
         'Cyclist': (1, 0.0, 0.0),
         'Pedestrian': (0.0, 1, 0.0),
-        'Car': (0.0, 0, 1.0),
+        'Car': (0.0, 0.3, 1.0),
         'Others': (0.75, 0.75, 0.75)
     }
 
@@ -97,6 +104,9 @@ def vod_to_o3d(vod_bbx,vod_calib):
 
 
 
+
+
+
 def get_kitti_locations(vod_data_path):
     kitti_locations = KittiLocations(root_dir=vod_data_path,
                                 output_dir="output/",
@@ -107,44 +117,62 @@ def get_kitti_locations(vod_data_path):
                              
 
 
-def get_visualization_data(kitti_locations,dt_path,frame_id):
-
-    pred_dict = get_pred_dict(dt_path)
-    frame_ids = list(pred_dict.keys())
-    frame_data = FrameDataLoader(kitti_locations,
-                             frame_ids[frame_id],pred_dict)
-    vod_calib = FrameTransformMatrix(frame_data)
+def get_visualization_data(kitti_locations,dt_path,frame_id,is_test_set):
 
 
+    if is_test_set:
+        frame_ids  = [P(f).stem for f in glob(str(dt_path)+"/*")]
+        frame_data = FrameDataLoader(kitti_locations,
+                                frame_ids[frame_id],"",dt_path)
+        vod_calib = FrameTransformMatrix(frame_data)
+        
+
+    else:
+        pred_dict = get_pred_dict(dt_path)
+        frame_ids = list(pred_dict.keys())
+        frame_data = FrameDataLoader(kitti_locations,
+                                frame_ids[frame_id],pred_dict)
+        vod_calib = FrameTransformMatrix(frame_data)
+
+    # print(len(frame_ids))
+    
     # get pcd
     radar_points = frame_data.radar_data
     radar_points = transform_pcl(radar_points,vod_calib.t_lidar_radar)
+    radar_points = fov_filtering(radar_points,frame_ids[frame_id],is_radar=False)
     lidar_points = frame_data.lidar_data 
+    lidar_points = fov_filtering(lidar_points,frame_ids[frame_id],is_radar=True)
+
     
     # convert into o3d pointcloud object
     radar_pcd = o3d.geometry.PointCloud()
     radar_pcd.points = o3d.utility.Vector3dVector(radar_points[:,0:3])
-    radar_colors = np.ones_like(lidar_points[:,0:3])
-    radar_pcd.colors = o3d.utility.Vector3dVector(radar_colors)
+    # radar_colors = np.ones_like(radar_points[:,0:3])
+    # radar_pcd.colors = o3d.utility.Vector3dVector(radar_colors)
     
     lidar_pcd = o3d.geometry.PointCloud()
     lidar_pcd.points = o3d.utility.Vector3dVector(lidar_points[:,0:3])
     lidar_colors = np.ones_like(lidar_points[:,0:3])
     lidar_pcd.colors = o3d.utility.Vector3dVector(lidar_colors)
 
-    # GET BOXES IN VOD FORMAT
-    vod_preds = FrameLabels(frame_data.get_predictions()).labels_dict
-    vod_labels = FrameLabels(frame_data.get_labels()).labels_dict
+    
+    if is_test_set:
+        vod_labels = None
+        o3d_labels = None 
+    else:
+        vod_labels = FrameLabels(frame_data.get_labels()).labels_dict
+        o3d_labels = vod_to_o3d(vod_labels,vod_calib)    
 
-    # CONVERT TO O3D GEOMETRY OBJECT
+    vod_preds = FrameLabels(frame_data.get_predictions()).labels_dict
     o3d_predictions = vod_to_o3d(vod_preds,vod_calib)
-    o3d_labels = vod_to_o3d(vod_labels,vod_calib)
+    
 
     vis_dict = {
         'radar_pcd': [radar_pcd],
         'lidar_pcd': [lidar_pcd],
         'o3d_predictions': o3d_predictions,
-        'o3d_labels': o3d_labels
+        'o3d_labels': o3d_labels,
+        'frame_id': frame_ids[frame_id]
     }
     return vis_dict
 
@@ -173,26 +201,34 @@ def vis_one_frame(
     vis_dict,
     camera_pos_file,
     output_name,
-    plot_radar_pcd=False,
-    plot_lidar_pcd=True,
+    plot_radar_pcd=True,
+    plot_lidar_pcd=False,
     plot_labels=True,
     plot_predictions=False):
 
     
     geometries = []
+    name_str = ''
 
     if plot_radar_pcd:
         geometries += vis_dict['radar_pcd']
         point_size = 3
+        name_str += 'Radar'
     if plot_lidar_pcd:
         geometries += vis_dict['lidar_pcd']
         point_size = 1 
+        name_str += 'Lidar'
     if plot_labels:
         geometries += vis_dict['o3d_labels']
+        name_str += 'GT'
     if plot_predictions:
         geometries += vis_dict['o3d_predictions']
+        name_str += 'Pred'
 
-    
+    if name_str != '':
+        output_name  = output_name / name_str
+    output_name.mkdir(parents=True,exist_ok=True)
+
     viewer = o3d.visualization.Visualizer()
     viewer.create_window()
     # DRAW STUFF
@@ -212,8 +248,45 @@ def vis_one_frame(
     ctr.convert_from_pinhole_camera_parameters(parameters)
     
     # viewer.run()
-    viewer.capture_screen_image(f"{output_name}.png")
+    frame_id = vis_dict['frame_id']
+    viewer.capture_screen_image(f'{output_name}/{frame_id}.png',True)
     viewer.destroy_window()
+
+
+
+def vis_all_frames(
+    kitti_locations,
+    dt_path,
+    CAMERA_POS_PATH,
+    OUTPUT_IMG_PATH,
+    plot_radar_pcd,
+    plot_lidar_pcd,
+    plot_labels,
+    plot_predictions,
+    is_test_set = False):
+
+    
+    if is_test_set:
+        frame_ids  = [P(f).stem for f in glob(str(dt_path)+"/*")]
+
+    else:
+        pred_dict = get_pred_dict(dt_path)
+        frame_ids = list(pred_dict.keys())
+
+    for i in tqdm(range(len(frame_ids))):
+        vis_dict = get_visualization_data(kitti_locations,dt_path,i,is_test_set)
+        vis_one_frame(
+            vis_dict = vis_dict,
+            camera_pos_file=CAMERA_POS_PATH,
+            output_name=OUTPUT_IMG_PATH,
+            plot_radar_pcd=plot_radar_pcd,
+            plot_lidar_pcd=plot_lidar_pcd,
+            plot_labels=plot_labels,
+            plot_predictions=plot_predictions)
+
+    
+
+# %%
 
 # %%
 def main():
@@ -222,35 +295,98 @@ def main():
     i.e. radar,lidar,gt,pred boxes all in lidar coordinate frame 
     '''
 
-    vod_data_path = '/Users/gabrielchan/Desktop/data/view_of_delft_PUBLIC'
+    vod_data_path = '/mnt/12T/public/view_of_delft'
+
+    path_dict = {
+        'CFAR_radar':'output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
+        'radar_rcsv':'output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint',
+        'radar_rcs':'output/IA-SSD-vod-radar/iassd_rcs/eval/best_epoch_checkpoint',
+        'radar_v':'output/IA-SSD-vod-radar/iassd_vcomp_only/eval/best_epoch_checkpoint',
+        'radar':'output/IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'lidar_i':'output/IA-SSD-vod-lidar/all_cls/eval/checkpoint_epoch_80',
+        'lidar':'output/IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'CFAR_lidar_rcsv':'output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint',
+        'CFAR_lidar_rcs':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_rcs_only/eval/best_epoch_checkpoint',
+        'CFAR_lidar_v':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_vcomp_only/eval/best_epoch_checkpoint',
+        'CFAR_lidar':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint',
+        'pp_radar_rcs' : 'output/pointpillar_vod_radar/debug_new/eval/checkpoint_epoch_80',
+        'pp_radar_rcsv' : 'output/pointpillar_vod_radar/vrcomp/eval/best_epoch_checkpoint', 
+        '3dssd_radar_rcs': 'output/3DSSD_vod_radar/rcs/eval/best_epoch_checkpoint',
+        '3dssd_radar_rcsv': 'output/3DSSD_vod_radar/vcomp/eval/best_epoch_checkpoint',
+        'centerpoint_radar_rcs': 'output/centerpoint_vod_radar/rcs/eval/best_epoch_checkpoint',
+        'centerpoint_radar_rcsv': 'output/centerpoint_vod_radar/rcsv/eval/best_epoch_checkpoint',
+        'second_radar_rcs': 'output/second_vod_radar/radar_second_with_aug/eval/checkpoint_epoch_80',
+        'second_radar_rscv': 'output/second_vod_radar/pp_radar_rcs_doppler/eval/checkpoint_epoch_80',
+        'pp_lidar': 'output/pointpillar_vod_lidar/debug_new/eval/checkpoint_epoch_80',
+        '3dssd_lidar': 'output/3DSSD_vod_lidar/all_cls/eval/checkpoint_epoch_80',
+        'centerpoint_lidar': 'output/centerpoint_vod_lidar/xyzi/eval/best_epoch_checkpoint'
+    }
+
+
+    test_dict = {
+        'CFAR_lidar_rcsv':'/root/gabriel/code/parent/CenterPoint-KITTI/output/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/IA-SSD-GAN-vod-aug-lidar/default/eval/epoch_5/val/default/final_result/data',
+        'CFAR_radar':'output/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/radar48001_512all/IA-SSD-GAN-vod-aug/default/eval/epoch_512/val/default/final_result/data',
+
+    }
     
+    abs_path = P(__file__).parent.resolve()
+    base_path = abs_path.parents[1]
     #------------------------------------SETTINGS------------------------------------
     frame_id = 333
-    detection_result_path = P('/Users/gabrielchan/Desktop/data/pcdet')
-    dt_path = str(detection_result_path / 'result.pkl')
-    CAMERA_POS_PATH = 'camera_position.json'
-    OUTPUT_IMG_PATH = 'output'
+    is_test_set = True
+    tag = 'CFAR_lidar_rcsv'
+    CAMERA_POS_PATH = 'test_pos.json'
+    output_name = tag+'_testset' if is_test_set else tag 
+    OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  output_name
     #--------------------------------------------------------------------------------
 
-    kitti_locations = get_kitti_locations(vod_data_path)
-    vis_dict = get_visualization_data(kitti_locations,dt_path,frame_id)
-    
+    OUTPUT_IMG_PATH.mkdir(parents=True,exist_ok=True)
+    detection_result_path = base_path / path_dict[tag]
 
+    dt_path = str(detection_result_path / 'result.pkl')    
+    test_dt_path = base_path / test_dict[tag]
+
+    kitti_locations = get_kitti_locations(vod_data_path)
+    
     # UNCOMMENT THIS TO CREATE A CAMERA SETTING JSON,  
     # set_camera_position(vis_dict,'test_pos')
 
-    vis_one_frame(
-        vis_dict = vis_dict,
-        camera_pos_file=CAMERA_POS_PATH,
-        output_name=f'{OUTPUT_IMG_PATH}/{frame_id}_vis',
+
+    # vis_dict = get_visualization_data(kitti_locations,dt_path,frame_id)
+    # vis_one_frame(
+    #     vis_dict = vis_dict,
+    #     camera_pos_file=CAMERA_POS_PATH,
+    #     output_name=OUTPUT_IMG_PATH,
+    #     plot_radar_pcd=True,
+    #     plot_lidar_pcd=True,
+    #     plot_labels=True,
+    #     plot_predictions=False)
+
+    vis_all_frames(
+        kitti_locations,
+        test_dt_path,
+        CAMERA_POS_PATH,
+        OUTPUT_IMG_PATH,
         plot_radar_pcd=False,
         plot_lidar_pcd=True,
-        plot_labels=True,
-        plot_predictions=False)
+        plot_labels=False,
+        plot_predictions=True,
+        is_test_set=is_test_set)
 
+
+
+    
+    # TODO: put this into a function 
+    # test_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcsvtest/LidarPred'
+    # save_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcsvtest/CFAR_lidar_rcsvtest_.mp4'
+    # dt_imgs = sorted(glob(str(P(test_path)/'*.png')))
+    # make_vid(dt_imgs, save_path, fps=15)
 
 #%%
 if __name__ == "__main__":
+
+    # source py3env/bin/activate
+    #export PYTHONPATH="${PYTHONPATH}:/root/gabriel/code/parent/CenterPoint-KITTI"
     main()
 
 # %%

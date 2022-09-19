@@ -1,5 +1,5 @@
 sbatch -N 1 -n 1 --mem=16000 \
---time 04:00:00 \
+--time 08:00:00 \
 --cpus-per-task=8 \
 --gres=gpu:1 \
 --partition=PGR-Standard \
