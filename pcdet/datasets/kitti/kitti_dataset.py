@@ -125,8 +125,8 @@ class KittiDataset(DatasetTemplate):
         # print(lidar_file)
         assert lidar_file.exists()
         radar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
-        if self.block_point_cloud_features:
-            radar_point_cloud[:, 3:] = 0
+        # if self.block_point_cloud_features:
+            # radar_point_cloud[:, 3:] = 0
         return radar_point_cloud
 
     def get_image_shape(self, idx):
@@ -461,6 +461,7 @@ class KittiDataset(DatasetTemplate):
             # print('not loading attach lidar')
             attach = None
         img_shape = info['image']['image_shape']
+        # img_shape = None 
         if self.dataset_cfg.FOV_POINTS_ONLY:
             pts_rect = calib.lidar_to_rect(points[:, 0:3])
             fov_flag = self.get_fov_flag(pts_rect, img_shape, calib)
