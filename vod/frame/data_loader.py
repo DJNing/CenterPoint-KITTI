@@ -14,7 +14,8 @@ class FrameDataLoader:
     def __init__(self,
                  kitti_locations: KittiLocations,
                  frame_number: str,
-                 pred_dict = None):
+                 pred_dict = None,
+                 test_set_path = None):
         """
 Constructor which creates the backing fields for the properties which can load and store data from the dataset
 upon request
@@ -26,6 +27,7 @@ upon request
         self.kitti_locations: KittiLocations = kitti_locations
         self.frame_number: str = frame_number
         self.pred_dict: dict = pred_dict
+        self.test_set_path: str = test_set_path
         # Getting filed id from frame number
         self.file_id: str = str(self.frame_number).zfill(5)
 
@@ -210,16 +212,22 @@ does not exist, it returns None.
 
         :return: List of strings with prediction data.
         """
+        
+        if self.test_set_path is not None:
+            label_file = os.path.join(self.test_set_path, f'{self.file_id}.txt')
+            with open(label_file, 'r') as text:
+                labels = text.readlines()
 
-        try:
-            labels = self.pred_dict[self.frame_number]
-            # label_file = os.path.join(self.kitti_locations.pred_dir, f'{self.file_id}.txt')
-            # with open(label_file, 'r') as text:
-            #     labels = text.readlines()
+        else: 
+            try:
+                labels = self.pred_dict[self.frame_number]
+                # label_file = os.path.join(self.kitti_locations.pred_dir, f'{self.file_id}.txt')
+                # with open(label_file, 'r') as text:
+                #     labels = text.readlines()
 
-        except FileNotFoundError:
-            logging.error(f"{self.file_id}.txt does not exist at location: {self.kitti_locations.pred_dir}!")
-            return None
+            except FileNotFoundError:
+                logging.error(f"{self.file_id}.txt does not exist at location: {self.kitti_locations.pred_dir}!")
+                return None
 
         return labels
 
