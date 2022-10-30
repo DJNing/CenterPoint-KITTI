@@ -1,4 +1,5 @@
 # %%
+# import torch
 import matplotlib.pyplot as plt
 import pickle 
 from pathlib import Path as P
@@ -23,7 +24,6 @@ from collections import Counter
 import matplotlib.cm as cm
 import os
 # from vis_tools import fov_filtering
-
 
 
 
@@ -214,7 +214,7 @@ def vis_one_frame(
     output_name,
     plot_radar_pcd=True,
     plot_lidar_pcd=False,
-    plot_labels=True,
+    plot_labels=False,
     plot_predictions=False):
 
     
@@ -333,12 +333,16 @@ def main():
         'centerpoint_lidar': 'output/centerpoint_vod_lidar/xyzi/eval/best_epoch_checkpoint'
     }
 
+    # ['centerpoint_lidar','3dssd_lidar','pp_lidar','lidar_i'] 
 
     test_dict = {
         'CFAR_lidar_rcsv':'/root/gabriel/code/parent/CenterPoint-KITTI/output/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/IA-SSD-GAN-vod-aug-lidar/default/eval/epoch_5/val/default/final_result/data',
         'CFAR_radar':'output/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/radar48001_512all/IA-SSD-GAN-vod-aug/default/eval/epoch_512/val/default/final_result/data',
 
     }
+    
+
+
     
     abs_path = P(__file__).parent.resolve()
     base_path = abs_path.parents[1]
@@ -349,10 +353,10 @@ def main():
     }
     resolution = '1080'
     is_test_set = False
-    tag = 'CFAR_lidar_rcs'
-    CAMERA_POS_PATH = 'test_pos2.json'
+    tag = 'lidar_i'
+    CAMERA_POS_PATH = 'zoomed_camera_2.json'
     output_name = tag+'_testset' if is_test_set else tag 
-    OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  (output_name + resolution+"_new")
+    OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  (output_name + resolution+"_zoomedv2")
     #--------------------------------------------------------------------------------
 
     OUTPUT_IMG_PATH.mkdir(parents=True,exist_ok=True)
@@ -365,6 +369,11 @@ def main():
 
     kitti_locations = get_kitti_locations(vod_data_path)
     
+    
+    # for tag in ['centerpoint_lidar','3dssd_lidar','pp_lidar','lidar_i']:
+    #     do_vis(path_dict,tag)
+
+
     # UNCOMMENT THIS TO CREATE A CAMERA SETTING JSON,  
     # set_camera_position(vis_dict,'test_pos')
 
@@ -390,55 +399,141 @@ def main():
     #     plot_predictions=True,
     #     is_test_set=is_test_set)
 
+
+    # # #### CREATE DETECTION DATABASE #### 
     # tag_list = ['CFAR_lidar_rcs','lidar_i']
     # dt_paths = get_paths(base_path,path_dict,tag_list)
-    # compare_models(kitti_locations,dt_paths)
+    # compare_models(kitti_locations,dt_paths,tag_list)
 
-    counter_path = '/root/gabriel/code/parent/CenterPoint-KITTI/detection_counters.npy'
-    frame_id_path = '/root/gabriel/code/parent/CenterPoint-KITTI/frame_ids_np.npy'
-    k = 20
-    print(f'top {k} frames where model 1 is closer to GT compared to model 2')
-    frames = analyze_models(counter_path,frame_id_path,20)
-    print(frames)
-
-    gt_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/lidar_i1080_new/LidarGT'
-    det_path_1 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_new/LidarPred'
-    det_path_2 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/lidar_i1080_new/LidarPred'
-    output_path = base_path /'output' / 'vod_vis' / 'detection_comparisons'
-    gather_frames(frames,det_path_1,det_path_2,gt_path,output_path)
+    # for tag in ['centerpoint_lidar','3dssd_lidar','pp_lidar','lidar_i']:
+    #     tag_list = ['CFAR_lidar_rcs',tag]
+    #     dt_paths = get_paths(base_path,path_dict,tag_list)
+    #     compare_models(kitti_locations,dt_paths,tag_list)
+    
 
 
 
 
-    # TODO: put this into a function 
-    # test_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_radar_testset_spring/RadarPred'
-    # save_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_radar_testset_spring/CFAR_radar_testset_spring.mp4'
+
+
+    
+
+
+
+
+
+
+    #### FIND TOP K ####
+    # paths = [
+    #     '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcs3dssd_lidar.npy',
+    #     '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcscenterpoint_lidar.npy',
+    #     '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcslidar_i.npy',
+    #     '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcspp_lidar.npy'
+    # ]
+
+
+    # frames = []
+    # # counter_path = '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcs3dssd_lidar.npy'
+    # frame_id_path = '/root/gabriel/code/parent/CenterPoint-KITTI/frame_ids_np.npy'
+    # k = 30
+    # nums = []
+    # # print(f'top {k} frames where model 1 is closer to GT compared to model 2')
+    # for p in paths:
+    #     f, n = analyze_models(p,frame_id_path,k)
+    #     frames += [f]
+    #     nums += [n]
+
+
+    topk = {'lidar_i':[ 254,  221,  328,  253,  252,  157,  336,  338,  318,  313, 1233,  343,
+          384,  287,  288,  379,  155,  344,  314,   25,   26,   31,  272,  241,
+          243,  989,  382,  335,  413,  438],
+        'pp_lidar':[1011, 1012, 1004, 1069, 1073,    1,  547,  989,  157, 1165, 1211, 1218,
+         1148, 1123, 1227,  561,  144,  575,  551,  574,  572,  566,  553,  554,
+          555,  556,  557,  563,  562,  302],
+        '3dssd_lidar':[ 226,  157,  155,  516,  288,  858,  185,  961,  417,  381,  243,  220,
+          374,  221,  222,    1,  384,  328,  334,  299,  234,    8,  193,  402,
+          152,  216,  386,  383,  229,  387],
+        'centerpoint_lidar':[   4,  155, 1011,  946, 1071,    8,  157,  993, 1067, 1066, 1068, 1069,
+          800, 1072, 1070,    9,  152, 1123, 1111, 1012,    6, 1168,  941, 1172,
+         1116, 1004, 1113, 1227, 1140, 1151]}
+
+    output_dict = {
+        'lidar_i':'/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/lidar_i1080_zoomedv2/LidarPred',
+        'pp_lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/pp_lidar1080_zoomedv2/LidarPred',
+        '3dssd_lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/3dssd_lidar1080_zoomedv2/LidarPred',
+        'centerpoint_lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/centerpoint_lidar1080_zoomedv2/LidarPred',
+    }
+    
+
+    for k in topk.keys():
+        gt_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_zoomedv2/LidarGT'
+        det_path_1 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_zoomedv2/LidarPred'
+        det_path_2 = output_dict[k]
+        output_path = base_path /'output' / 'vod_vis' / 'detection_comparisons' / k
+        gather_frames(topk[k],det_path_1,det_path_2,gt_path,output_path)
+
+
+
+    # #### SYMLINK THE IMAGES ####
+    # det_path_1 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_new/LidarPred'
+    # det_path_2 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/lidar_i1080_new/LidarPred'
+
+
+
+
+    # # TODO: put this into a function 
+    # test_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_zoomedv2/LidarPred'
+    # save_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_zoomedv2_LidarPred.mp4'
     # dt_imgs = sorted(glob(str(P(test_path)/'*.png')))
     # make_vid(dt_imgs, save_path, fps=15)
 
 
 
 
+
 #%%
+
+
+def get_filtering_data(kitti_locations,dt_path,frame_id):
+    pred_dict = get_pred_dict(dt_path)
+    frame_ids = list(pred_dict.keys())
+    frame_data = FrameDataLoader(kitti_locations,
+                            frame_ids[frame_id],pred_dict)
+    vod_calib = FrameTransformMatrix(frame_data)
+
+    # print(len(frame_ids))
+ 
+    vod_labels = FrameLabels(frame_data.get_labels()).labels_dict
+   
+
+    vod_preds = FrameLabels(frame_data.get_predictions()).labels_dict
+    
+
+    vis_dict = {
+        'vod_predictions': vod_preds, 
+        'vod_labels': vod_labels,
+        'frame_id': frame_ids[frame_id]
+    }
+    return vis_dict
+
+
+
+
+
 def gather_frames(frame_ids,det_path1,det_path2,gt_path,output_path):
 
-    print('')    
+  
 
     for frame in frame_ids:
         path = output_path / str(frame)
         os.makedirs(path,exist_ok=True)
         img1 = det_path1 + f"/{str(frame).zfill(5)}.png"
         img2 = det_path2 + f"/{str(frame).zfill(5)}.png"
-        gt = det_path1 + f"/{str(frame).zfill(5)}.png"
+        gt = gt_path + f"/{str(frame).zfill(5)}.png"
         
         os.symlink(img1,path / P(str(P(det_path1).parents[0].stem)+".png"))
         os.symlink(img2,path / P(str(P(det_path2).parents[0].stem)+".png"))
         os.symlink(gt,path / P("gt.png"))
-
-
-
-
-
 
 
 
@@ -455,10 +550,14 @@ def analyze_models(counter_path,frame_id_path,k):
     abs_diff = np.abs(repeated_gt-model_counts)
     difference_to_gt = np.sum(abs_diff,axis=2)
 
-    relative_diff = np.abs(difference_to_gt[:,0]-difference_to_gt[:,1])
-    ind = np.argpartition(relative_diff, -k)[-k:]
 
-    return frame_ids[ind]
+
+    relative_diff = np.abs(difference_to_gt[:,0]-difference_to_gt[:,1])
+    diff_tens = torch.from_numpy(relative_diff)
+    v,i = torch.topk(diff_tens,k)
+    # ind = np.argpartition(relative_diff, -k)[-k:]
+
+    return frame_ids[i.numpy()],v
 
 def get_paths(base_path,path_dict,tag_list):
     dt_paths = []
@@ -471,6 +570,7 @@ def get_paths(base_path,path_dict,tag_list):
 def compare_models(
     kitti_locations,
     dt_paths,
+    tag_list,
     is_test_set = False):
 
     
@@ -498,11 +598,11 @@ def compare_models(
                 counter[i][-1][name_to_int[c]] = gt_counter[c]
     
     
-    with open('detection_counters.npy', 'wb') as f:
+    with open(f'{tag_list[0]}{tag_list[1]}.npy', 'wb') as f:
         np.save(f,counter)
 
-    with open('frame_ids_np.npy', 'wb') as f:
-        np.save(f,frame_ids_np)
+    # with open('frame_ids_np.npy', 'wb') as f:
+    #     np.save(f,frame_ids_np)
 
 
 
