@@ -24,7 +24,7 @@ from collections import Counter
 import matplotlib.cm as cm
 import os
 # from vis_tools import fov_filtering
-from val_path_dict import path_dict,lidar_path_dict
+from val_path_dict import path_dict,lidar_path_dict,lidar_baseline_tags
 
 
 
@@ -365,7 +365,81 @@ def vis_all_frames(
 
 # %%
 
+def do_vis(tag,frames,is_test_set,test_dict,vod_data_path,resolution):
+        abs_path = P(__file__).parent.resolve()
+        base_path = abs_path.parents[1]
+        CAMERA_POS_PATH = 'camera480v6.json'
+        output_name = tag+'_testset' if is_test_set else tag 
+        OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  (output_name + resolution+"v6")
+    #--------------------------------------------------------------------------------
 
+        OUTPUT_IMG_PATH.mkdir(parents=True,exist_ok=True)
+
+        detection_result_path = base_path / path_dict[tag]
+
+        dt_path = str(detection_result_path / 'result.pkl')    
+        test_dt_path = base_path / test_dict[tag] if is_test_set else base_path / path_dict[tag]
+
+        vis_path = test_dt_path if is_test_set else dt_path
+
+        kitti_locations = get_kitti_locations(vod_data_path)
+        
+        
+        # for tag in ['centerpoint_lidar','3dssd_lidar','pp_lidar','lidar_i']:
+        #     do_vis(path_dict,tag)
+
+
+        # UNCOMMENT THIS TO CREATE A CAMERA SETTING JSON,  
+        # set_camera_position(vis_dict,'test_pos')
+
+
+        # vis_dict = get_visualization_data(kitti_locations,dt_path,frame_id)
+        # vis_one_frame(
+        #     vis_dict = vis_dict,
+        #     camera_pos_file=CAMERA_POS_PATH,
+        #     output_name=OUTPUT_IMG_PATH,
+        #     plot_radar_pcd=True,
+        #     plot_lidar_pcd=True,
+        #     plot_labels=True,
+        #     plot_predictions=False)
+
+
+        # IDS = ['00328','00312', '00339', '00338', '00336', '00335', '00334', '00333', '00340',
+        # '00299', '00318', '00322', '00321', '00323', '00287', '00325', '00320', '00310',
+        # '00408', '00305', '00302', '00297', '00296', '00294', '00293', '00290', '00199',
+        # '00288', '00286', '00326',]        
+
+
+
+        # raw_IDS2 = [8411, 4892, 4893, 4850,  487,  490, 8418, 8417, 4845,  491,  144, 8415,
+        #     8414,  494,  495, 4851,  496, 8409, 8408, 4831, 4830, 4829, 4828, 4826,
+        #     499, 4824, 4820, 4819, 4818, 4890]
+
+        # IDS2 = [str(v).zfill(5) for v in raw_IDS2]
+        # IDS = [ str(v).zfill(5) for v in list(range(110,171))]
+
+        vis_subset(
+            kitti_locations,
+            vis_path,
+            CAMERA_POS_PATH,
+            OUTPUT_IMG_PATH,
+            plot_radar_pcd=False,
+            plot_lidar_pcd=True,
+            plot_labels=False,
+            plot_predictions=True,
+            frame_ids=frames)
+        
+
+        # vis_subset(
+        #     kitti_locations,
+        #     vis_path,
+        #     CAMERA_POS_PATH,
+        #     OUTPUT_IMG_PATH,
+        #     plot_radar_pcd=False,
+        #     plot_lidar_pcd=True,
+        #     plot_labels=False,
+        #     plot_predictions=True,
+        #     frame_ids=IDS2)
 def vis_subset(
 kitti_locations,
     dt_path,
@@ -423,110 +497,38 @@ def main():
     resolution = '480'
     is_test_set = False
     tag = 'CFAR_lidar_rcs'
-    def do_vis(tag):
-        abs_path = P(__file__).parent.resolve()
-        base_path = abs_path.parents[1]
-        CAMERA_POS_PATH = 'camera480v6.json'
-        output_name = tag+'_testset' if is_test_set else tag 
-        OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  (output_name + resolution+"v6")
-    #--------------------------------------------------------------------------------
+    
+    abs_path = P(__file__).parent.resolve()
+    base_path = abs_path.parents[1]
+    CAMERA_POS_PATH = 'camera480v6.json'
+    output_name = tag+'_testset' if is_test_set else tag 
+    OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  (output_name + resolution+"v6")
+#--------------------------------------------------------------------------------
 
-        OUTPUT_IMG_PATH.mkdir(parents=True,exist_ok=True)
+    OUTPUT_IMG_PATH.mkdir(parents=True,exist_ok=True)
 
-        detection_result_path = base_path / path_dict[tag]
+    detection_result_path = base_path / path_dict[tag]
 
-        dt_path = str(detection_result_path / 'result.pkl')    
-        test_dt_path = base_path / test_dict[tag] if is_test_set else base_path / path_dict[tag]
+    dt_path = str(detection_result_path / 'result.pkl')    
+    test_dt_path = base_path / test_dict[tag] if is_test_set else base_path / path_dict[tag]
 
-        vis_path = test_dt_path if is_test_set else dt_path
+    vis_path = test_dt_path if is_test_set else dt_path
 
-        kitti_locations = get_kitti_locations(vod_data_path)
-        
-        
-        # for tag in ['centerpoint_lidar','3dssd_lidar','pp_lidar','lidar_i']:
-        #     do_vis(path_dict,tag)
+    kitti_locations = get_kitti_locations(vod_data_path)
+
+  
 
 
-        # UNCOMMENT THIS TO CREATE A CAMERA SETTING JSON,  
-        # set_camera_position(vis_dict,'test_pos')
-
-
-        # vis_dict = get_visualization_data(kitti_locations,dt_path,frame_id)
-        # vis_one_frame(
-        #     vis_dict = vis_dict,
-        #     camera_pos_file=CAMERA_POS_PATH,
-        #     output_name=OUTPUT_IMG_PATH,
-        #     plot_radar_pcd=True,
-        #     plot_lidar_pcd=True,
-        #     plot_labels=True,
-        #     plot_predictions=False)
-
-
-        # IDS = ['00328','00312', '00339', '00338', '00336', '00335', '00334', '00333', '00340',
-        # '00299', '00318', '00322', '00321', '00323', '00287', '00325', '00320', '00310',
-        # '00408', '00305', '00302', '00297', '00296', '00294', '00293', '00290', '00199',
-        # '00288', '00286', '00326',]        
-
-
-
-        # raw_IDS2 = [8411, 4892, 4893, 4850,  487,  490, 8418, 8417, 4845,  491,  144, 8415,
-        #     8414,  494,  495, 4851,  496, 8409, 8408, 4831, 4830, 4829, 4828, 4826,
-        #     499, 4824, 4820, 4819, 4818, 4890]
-
-        # IDS2 = [str(v).zfill(5) for v in raw_IDS2]
-        # IDS = [ str(v).zfill(5) for v in list(range(110,171))]
-        IDS = ['00154', '00150', '00213', '00158', '00195', '00157', '00151',
-       '00217', '00171', '00196', '00160', '00178', '00164', '00155',
-       '00214', '00211', '00224', '00220', '00208', '00190']
-        vis_subset(
-            kitti_locations,
-            vis_path,
-            CAMERA_POS_PATH,
-            OUTPUT_IMG_PATH,
-            plot_radar_pcd=False,
-            plot_lidar_pcd=True,
-            plot_labels=False,
-            plot_predictions=True,
-            frame_ids=IDS)
-        
-
-        # vis_subset(
-        #     kitti_locations,
-        #     vis_path,
-        #     CAMERA_POS_PATH,
-        #     OUTPUT_IMG_PATH,
-        #     plot_radar_pcd=False,
-        #     plot_lidar_pcd=True,
-        #     plot_labels=False,
-        #     plot_predictions=True,
-        #     frame_ids=IDS2)
-
-
-    tags = [
-    'lidar_i',
-    'CFAR_lidar_rcs',
-    'second_lidar',
-    'pp_lidar',
-    '3dssd_lidar',
-    'centerpoint_lidar',
-    'pvrcnn_lidar',
-    'pointrcnn_lidar'
-    ]
-
-    for tag in tags:
-        print(tag)
-        do_vis(tag)
-
-    # vis_all_frames(
-    #     kitti_locations,
-    #     vis_path,
-    #     CAMERA_POS_PATH,
-    #     OUTPUT_IMG_PATH,
-    #     plot_radar_pcd=False,
-    #     plot_lidar_pcd=True,
-    #     plot_labels=True,
-    #     plot_predictions=False,
-    #     is_test_set=is_test_set)
+    vis_all_frames(
+        kitti_locations,
+        vis_path,
+        CAMERA_POS_PATH,
+        OUTPUT_IMG_PATH,
+        plot_radar_pcd=False,
+        plot_lidar_pcd=True,
+        plot_labels=True,
+        plot_predictions=False,
+        is_test_set=is_test_set)
 
 
     # # #### CREATE DETECTION DATABASE #### 
@@ -547,65 +549,6 @@ def main():
 
     
 
-
-
-
-
-
-    #### FIND TOP K ####
-    # paths = [
-    #     '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcs3dssd_lidar.npy',
-    #     '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcscenterpoint_lidar.npy',
-    #     '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcslidar_i.npy',
-    #     '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcspp_lidar.npy'
-    # ]
-
-
-    # frames = []
-    # # counter_path = '/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/CFAR_lidar_rcs3dssd_lidar.npy'
-    # frame_id_path = '/root/gabriel/code/parent/CenterPoint-KITTI/frame_ids_np.npy'
-    # k = 30
-    # nums = []
-    # # print(f'top {k} frames where model 1 is closer to GT compared to model 2')
-    # for p in paths:
-    #     f, n = analyze_models(p,frame_id_path,k)
-    #     frames += [f]
-    #     nums += [n]
-
-
-    # topk = {'lidar_i':[ 254,  221,  328,  253,  252,  157,  336,  338,  318,  313, 1233,  343,
-    #       384,  287,  288,  379,  155,  344,  314,   25,   26,   31,  272,  241,
-    #       243,  989,  382,  335,  413,  438],
-    #     'pp_lidar':[1011, 1012, 1004, 1069, 1073,    1,  547,  989,  157, 1165, 1211, 1218,
-    #      1148, 1123, 1227,  561,  144,  575,  551,  574,  572,  566,  553,  554,
-    #       555,  556,  557,  563,  562,  302],
-    #     '3dssd_lidar':[ 226,  157,  155,  516,  288,  858,  185,  961,  417,  381,  243,  220,
-    #       374,  221,  222,    1,  384,  328,  334,  299,  234,    8,  193,  402,
-    #       152,  216,  386,  383,  229,  387],
-    #     'centerpoint_lidar':[   4,  155, 1011,  946, 1071,    8,  157,  993, 1067, 1066, 1068, 1069,
-    #       800, 1072, 1070,    9,  152, 1123, 1111, 1012,    6, 1168,  941, 1172,
-    #      1116, 1004, 1113, 1227, 1140, 1151]}
-
-    # output_dict = {
-    #     'lidar_i':'/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/lidar_i1080_zoomedv2/LidarPred',
-    #     'pp_lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/pp_lidar1080_zoomedv2/LidarPred',
-    #     '3dssd_lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/3dssd_lidar1080_zoomedv2/LidarPred',
-    #     'centerpoint_lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/centerpoint_lidar1080_zoomedv2/LidarPred',
-    # }
-    
-
-    # for k in topk.keys():
-    #     gt_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_zoomedv2/LidarGT'
-    #     det_path_1 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_zoomedv2/LidarPred'
-    #     det_path_2 = output_dict[k]
-    #     output_path = base_path /'output' / 'vod_vis' / 'detection_comparisons' / k
-    #     gather_frames(topk[k],det_path_1,det_path_2,gt_path,output_path)
-
-
-
-    # #### SYMLINK THE IMAGES ####
-    # det_path_1 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_new/LidarPred'
-    # det_path_2 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/lidar_i1080_new/LidarPred'
 
 
 
@@ -735,11 +678,30 @@ def compare_models(
 
 
 
+
+def generate_comparison_frames():
+    
+    
+    frames = np.load('/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/frames_to_generate.npy')
+    
+    frames = [str(f).zfill(5) for f in frames]
+
+    tag = 'CFAR_lidar_rcs'
+
+    is_test_set = False
+    vod_data_path = '/mnt/12T/public/view_of_delft'
+    resolution = '480'
+    for t in [tag]+lidar_baseline_tags:
+        do_vis(t,frames,is_test_set,None,vod_data_path,resolution)
+    
+
+
 #%%
 if __name__ == "__main__":
     # RUN THESE COMMANDS FIRST
     # source py3env/bin/activate
     # export PYTHONPATH="${PYTHONPATH}:/root/gabriel/code/parent/CenterPoint-KITTI"
-    main()
+    generate_comparison_frames()
+    # main()
 
 # %%

@@ -1,39 +1,21 @@
 import io as sysio
 import torch
-import numba
 import numpy as np
 import pickle
 from pathlib import Path as P
 from pcdet.datasets.kitti.kitti_object_eval_python.rotate_iou import rotate_iou_gpu_eval
 from pcdet.datasets.kitti.kitti_object_eval_python.eval import clean_data,_prepare_data,eval_class,get_mAP,get_mAP_R40
-from pcdet.datasets.kitti.kitti_object_eval_python.kitti_common import get_label_annos
-from vod.visualization.settings import label_color_palette_2d
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import pickle 
-from matplotlib.patches import Rectangle as Rec
 import numpy as np
 from tqdm import tqdm
-from vod import frame
-from vod.visualization.settings import label_color_palette_2d
-from vod.configuration import KittiLocations
-from vod.frame import FrameDataLoader, FrameLabels, FrameTransformMatrix
-from vod.frame.transformations import transform_pcl
-import open3d as o3d
-from scipy.spatial.transform import Rotation as R
-from vod.visualization import Visualization3D
-from skimage import io
-from vis_tools import fov_filtering, make_vid
-from glob import glob
 from collections import Counter
-import matplotlib.cm as cm
 import os
-# from vis_tools import fov_filtering
-from val_path_dict import path_dict, det_path_dict
+from val_path_dict import path_dict, det_path_dict,lidar_baseline_tags
 import shutil
 from draw_box_count_mAP import count_points_in_box
-
+from draw_3d import do_vis
+from functools import reduce
 
 
 def eval_individual_frames(gt_annos,dt_annos,box_count_threshold=None):
@@ -70,9 +52,16 @@ def eval_individual_frames(gt_annos,dt_annos,box_count_threshold=None):
 
 
 
-def get_top_frames_point_count(gt,dt,counts,k):
+def get_top_frames_point_count(gt,dt,k):
+    counts = get_lidar_range()
     all_classes_AP,mAP,frame_ids = eval_individual_frames(gt,dt,box_count_threshold=counts[0])
-    print('')
+    all_classes_tens = torch.from_numpy(all_classes_AP)
+    ped_AP = all_classes_tens[:,1]
+    v, i = torch.topk(ped_AP,k)
+
+    print(frame_ids[i])
+    return frame_ids[i]
+    # print('')
 
 
 
@@ -184,9 +173,9 @@ def load_gt_dt(tag,count_points=False,is_radar=False):
         data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
         
         gt = count_points_in_box(gt, is_radar, is_dt=False,data_path=data_path)
+        
         dt = count_points_in_box(dt, is_radar, is_dt=True,data_path=data_path)
-
-
+        
 
 
     new_gt = [gt[key] for key in gt.keys()]
@@ -210,49 +199,62 @@ def main():
                  DT = 2 cars, 1 ped, 0 cyclist
                diff = 1 + 1 + 1 = 3
                 "best" frames are the ones where diff is closest to 0                
+
+
+    WORKFLOW:
+    1. RUN THIS SCRIPT, this saves a npy file with frame #s to generate
+    2a. run 'source py3env/bin/activate' and 'export PYTHONPATH="${PYTHONPATH}:/root/gabriel/code/parent/CenterPoint-KITTI"'
+    2b. in the same terminal window run draw3d.generate_comparison_frames(), this creates the images
+    3. comeback and run the softlnk_baselines()
+
+    # TODO: Just generate all the frames so step 1 can be skipped
+
+
+
     '''    
-    # ! SETTINGS
+    # ! SETTINGS #####################
     tag = 'CFAR_lidar_rcs'
     k = 30 # top k frames
-    baseline_tags = ['']
-    # ! SETTINGS 
+    resolution = '480'
+    is_test_set = False
+    vod_data_path = '/mnt/12T/public/view_of_delft'
+
+    # ! SETTINGS #####################
 
     print(f'Evaluating {tag} with path {path_dict[tag]}')
     
 
 
-    # gt,dt = load_gt_dt(tag,count_points=True,is_radar=False)
+    
+    gt,dt = load_gt_dt(tag,count_points=True,is_radar=False)
+    top_frame_ids_mAP = get_top_frames_mAP(gt,dt,k)
+    top_frame_ids_counts = get_top_frames_counts(gt,dt,k).numpy()
+    top_frame_points = get_top_frames_point_count(gt,dt,k)
+    
+    ret_dict = {
+        'mAP': top_frame_ids_mAP,
+        'counts': top_frame_ids_counts,
+        'box_point_count': top_frame_points
+    }
+    frames_to_generate = reduce(np.union1d, (top_frame_ids_mAP,top_frame_ids_counts,top_frame_points))
+    
+    print('='*30,'frames to generate','='*30)
+    print(frames_to_generate)
+    with open('frames_to_generate.npy', 'wb') as f:
+        np.save(f,frames_to_generate)
+
+    for t in [tag]+lidar_baseline_tags:
+        do_vis(t,frames_to_generate,is_test_set,None,vod_data_path,resolution)
 
 
-    # top_frame_ids_mAP = get_top_frames_mAP(gt,dt,k)
-    # top_frame_ids_counts = get_top_frames_counts(gt,dt,k).numpy()
-    # counts = get_lidar_range()
-    # get_top_frames_point_count(gt,dt,counts,k)
-
-
-
-    baseline_tags = [
-    'lidar_i',
-    'second_lidar',
-    'pp_lidar',
-    '3dssd_lidar',
-    'centerpoint_lidar',
-    'pvrcnn_lidar',
-    'pointrcnn_lidar'
-    ]
-
-    # frame_seq = [ str(v).zfill(5) for v in list(range(110,171))]
-
-    frame_seq = ['00154', '00150', '00213', '00158', '00195', '00157', '00151',
-       '00217', '00171', '00196', '00160', '00178', '00164', '00155',
-       '00214', '00211', '00224', '00220', '00208', '00190']
-    softlink_baselines(
-        frame_seq,
-        main_tag=tag,
-        baseline_tags=baseline_tags,
-        file_name='best_ped',
-        method='mAP',
-        is_lidar=True)
+    # for k in ret_dict.keys():    
+    #     softlink_baselines(
+    #         ret_dict[k],
+    #         main_tag=tag,
+    #         baseline_tags=baseline_tags,
+    #         method=k,
+    #         file_name='test',
+    #         is_lidar=True)
 
     # softlink_baselines(
     #     top_frame_ids_counts,
