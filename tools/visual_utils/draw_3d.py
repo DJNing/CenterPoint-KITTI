@@ -23,7 +23,11 @@ import matplotlib.cm as cm
 import os
 # from vis_tools import fov_filtering
 from val_path_dict import path_dict,lidar_path_dict,lidar_baseline_tags
-
+import sys
+from PIL import Image
+from PIL import ImageFont
+from PIL import ImageDraw 
+import shutil
 def align_vector_to_another(a=np.array([0, 0, 1]), b=np.array([1, 0, 0])):
     """
     Aligns vector a to vector b with axis angle rotation
@@ -152,13 +156,15 @@ def get_pred_dict(dt_file):
     return labels_dict
 
 
-def vod_to_o3d(vod_bbx,vod_calib,is_combined=False,is_label=False):
+def vod_to_o3d(vod_bbx,vod_calib,bool_dict,is_label=True,chosen_pcd=None):
     # modality = 'radar' if is_radar else 'lidar'
     # split = 'testing' if is_test else 'training'    
     
 
     Classes = ['Cyclist','Pedestrian','Car','Others']
-
+    is_combined = bool_dict['is_combined']
+    # is_label = bool_dict['is_label']
+    draw_thick_boxes = bool_dict['DRAW_THICK_BOXES']
 
 
     if is_combined:
@@ -172,7 +178,8 @@ def vod_to_o3d(vod_bbx,vod_calib,is_combined=False,is_label=False):
             'Others': (0.75, 0.75, 0.75)
         }
 
-
+    
+    
 
     box_list = []
     for box in vod_bbx:
@@ -193,21 +200,31 @@ def vod_to_o3d(vod_bbx,vod_calib,is_combined=False,is_label=False):
             obbx = o3d.geometry.OrientedBoundingBox(xyz, rot_matrix, extent.T)
             obbx.color = COLOR_PALETTE.get(box['label_class'],COLOR_PALETTE['Others']) # COLOR
             
-            points = np.asarray(obbx.get_box_points())
-            lines = [
-            [0, 1],[1,7],[7,2],[2,0],
-            [3,6],[6,4],[4,5],[5,3],
-            [0,3],[1,6],[4,7],[2,5]
-        ]
-            colors = [COLOR_PALETTE.get(box['label_class'],COLOR_PALETTE['Others']) for i in range(len(lines))]
-            
-            if box['label_class'] == 'Car':
-                r = 0.04
+            if bool_dict['filter_empty'] and chosen_pcd is not None:
+                idx = obbx.get_point_indices_within_bounding_box(chosen_pcd.points)
+                if len(idx) == 0:
+                    print('BOX FILTERED')
+                    continue
+
+
+            if draw_thick_boxes:
+                points = np.asarray(obbx.get_box_points())
+                lines = [
+                [0, 1],[1,7],[7,2],[2,0],
+                [3,6],[6,4],[4,5],[5,3],
+                [0,3],[1,6],[4,7],[2,5]
+            ]
+                colors = [COLOR_PALETTE.get(box['label_class'],COLOR_PALETTE['Others']) for i in range(len(lines))]
+                
+                if box['label_class'] == 'Car':
+                    r = 0.07
+                else:
+                    r = 0.07
+                line_mesh1 = LineMesh(points, lines, colors, radius=r)
+                
+                box_list += [*line_mesh1.cylinder_segments]
             else:
-                r = 0.03
-            line_mesh1 = LineMesh(points, lines, colors, radius=r)
-            
-            box_list += [*line_mesh1.cylinder_segments]
+                box_list += [obbx]
     return box_list
 
 
@@ -224,7 +241,7 @@ def get_kitti_locations(vod_data_path):
                                 )
     return kitti_locations
                              
-def get_visualization_data_true_frame(kitti_locations,dt_path,frame_id,is_test_set,is_combined):
+def get_visualization_data_true_frame(kitti_locations,dt_path,frame_id,is_test_set,is_combined,is_directory=False,draw_thick_boxes=False,filter_empty_lidar=False,filter_empty_radar=False):
 
 
     if is_test_set:
@@ -233,6 +250,13 @@ def get_visualization_data_true_frame(kitti_locations,dt_path,frame_id,is_test_s
                                 frame_id,"",dt_path)
         vod_calib = FrameTransformMatrix(frame_data)
         
+    
+    elif is_directory:
+        frame_ids  = [P(f).stem for f in glob(str(dt_path)+"/*")]
+        frame_data = FrameDataLoader(kitti_locations,
+                                frame_id,"",dt_path)
+        vod_calib = FrameTransformMatrix(frame_data)
+            
 
     else:
         pred_dict = get_pred_dict(dt_path)
@@ -241,28 +265,24 @@ def get_visualization_data_true_frame(kitti_locations,dt_path,frame_id,is_test_s
                                 frame_id,pred_dict)
         vod_calib = FrameTransformMatrix(frame_data)
 
-    # print(len(frame_ids))
-    
-
-
-
     # get pcd
     original_radar = frame_data.radar_data
     radar_points = transform_pcl(original_radar,vod_calib.t_lidar_radar)
     radar_points,flag = fov_filtering(radar_points,frame_id,is_radar=False,return_flag=True)
     lidar_points = frame_data.lidar_data 
-    lidar_points = fov_filtering(lidar_points,frame_id,is_radar=True)
+    lidar_points = fov_filtering(lidar_points,frame_id,is_radar=False)
 
     
-    colors = cm.spring(original_radar[flag][:,4])[:,:3]
+    # colors = cm.spring(original_radar[flag][:,4])[:,:3]
 
 
 
     # convert into o3d pointcloud object
     radar_pcd = o3d.geometry.PointCloud()
     radar_pcd.points = o3d.utility.Vector3dVector(radar_points[:,0:3])
-    # radar_colors = np.ones_like(radar_points[:,0:3])
-    radar_pcd.colors = o3d.utility.Vector3dVector(colors)
+    radar_colors = np.ones_like(radar_points[:,0:3])
+    radar_pcd.colors = o3d.utility.Vector3dVector(radar_colors)
+    # radar_pcd.colors = o3d.utility.Vector3dVector(colors)
     
     lidar_pcd = o3d.geometry.PointCloud()
     lidar_pcd.points = o3d.utility.Vector3dVector(lidar_points[:,0:3])
@@ -276,11 +296,23 @@ def get_visualization_data_true_frame(kitti_locations,dt_path,frame_id,is_test_s
         o3d_labels = None 
     else:
         vod_labels = FrameLabels(frame_data.get_labels()).labels_dict
-        o3d_labels = vod_to_o3d(vod_labels,vod_calib,is_combined=is_combined,is_label=True)
+        o3d_labels = vod_to_o3d(vod_labels,vod_calib,is_combined=is_combined,is_label=True,draw_thick_boxes=draw_thick_boxes)
 
     vod_preds = FrameLabels(frame_data.get_predictions()).labels_dict
-    o3d_predictions = vod_to_o3d(vod_preds,vod_calib,is_combined=is_combined,is_label=False)
+    o3d_predictions = vod_to_o3d(vod_preds,vod_calib,is_combined=is_combined,is_label=False,draw_thick_boxes=draw_thick_boxes)
     
+
+    # filter_empty_lidar = True
+    if filter_empty_lidar:
+        o3d_labels = filter_empty_boxes(o3d_labels,lidar_pcd)
+        o3d_predictions= filter_empty_boxes(o3d_predictions,lidar_pcd)
+
+    elif filter_empty_radar:
+        o3d_labels = filter_empty_boxes(o3d_labels,radar_pcd)
+        o3d_predictions = filter_empty_boxes(o3d_predictions,radar_pcd)
+
+
+
 
     vis_dict = {
         'radar_pcd': [radar_pcd],
@@ -293,21 +325,43 @@ def get_visualization_data_true_frame(kitti_locations,dt_path,frame_id,is_test_s
     }
     return vis_dict
 
-def get_visualization_data(kitti_locations,dt_path,frame_id,is_test_set,is_combined=False):
+def filter_empty_boxes(bbx_list,pcd):
+    filtered = []
+    for bbx in bbx_list:
+        idx = bbx.get_point_indices_within_bounding_box(pcd.points)
+        if len(idx) > 0:
+            filtered += [bbx]
+
+    return filtered
 
 
-    if is_test_set:
+
+def get_visualization_data(kitti_locations,dt_path,frame_id,bool_dict):
+
+
+    is_test_set = bool_dict['is_test_set']
+    is_directory = bool_dict['is_directory']
+    is_combined = bool_dict['is_combined']
+    draw_thick_boxes = bool_dict['DRAW_THICK_BOXES']
+    filter_empty = bool_dict['filter_empty']
+    # filter_empty_radar = bool_dict['filter_radar']
+    use_frame_str = bool_dict['use_frame_str']
+
+    if is_test_set or is_directory:
+
         frame_ids  = [P(f).stem for f in glob(str(dt_path)+"/*")]
-        frame_data = FrameDataLoader(kitti_locations,
-                                frame_ids[frame_id],"",dt_path)
-        vod_calib = FrameTransformMatrix(frame_data)
-        
 
+        current_frame = frame_id if use_frame_str else frame_ids[frame_id] 
+        frame_data = FrameDataLoader(kitti_locations,
+                                current_frame,"",dt_path)
+        vod_calib = FrameTransformMatrix(frame_data)
+            
     else:
         pred_dict = get_pred_dict(dt_path)
         frame_ids = list(pred_dict.keys())
+        current_frame = frame_id if use_frame_str else frame_ids[frame_id] 
         frame_data = FrameDataLoader(kitti_locations,
-                                frame_ids[frame_id],pred_dict)
+                                current_frame,pred_dict)
         vod_calib = FrameTransformMatrix(frame_data)
 
     # print(len(frame_ids))
@@ -318,38 +372,59 @@ def get_visualization_data(kitti_locations,dt_path,frame_id,is_test_set,is_combi
     # get pcd
     original_radar = frame_data.radar_data
     radar_points = transform_pcl(original_radar,vod_calib.t_lidar_radar)
-    radar_points,flag = fov_filtering(radar_points,frame_ids[frame_id],is_radar=False,return_flag=True)
+    radar_points,flag = fov_filtering(radar_points,current_frame,is_radar=False,return_flag=True)
     lidar_points = frame_data.lidar_data 
-    lidar_points = fov_filtering(lidar_points,frame_ids[frame_id],is_radar=True)
+    lidar_points = fov_filtering(lidar_points,current_frame,is_radar=False)
 
     
-    colors = cm.spring(original_radar[flag][:,4])[:,:3]
+    # colors = cm.spring(original_radar[flag][:,4])[:,:3]
 
 
 
     # convert into o3d pointcloud object
     radar_pcd = o3d.geometry.PointCloud()
     radar_pcd.points = o3d.utility.Vector3dVector(radar_points[:,0:3])
-    # radar_colors = np.ones_like(radar_points[:,0:3])
-    radar_pcd.colors = o3d.utility.Vector3dVector(colors)
+    radar_colors = np.ones_like(radar_points[:,0:3])
+    radar_pcd.colors = o3d.utility.Vector3dVector(radar_colors)
     
     lidar_pcd = o3d.geometry.PointCloud()
     lidar_pcd.points = o3d.utility.Vector3dVector(lidar_points[:,0:3])
     lidar_colors = np.ones_like(lidar_points[:,0:3])
     lidar_pcd.colors = o3d.utility.Vector3dVector(lidar_colors)
 
-    
+
+
+    if filter_empty:
+        if bool_dict['plot_radar_pcd'] and bool_dict['plot_lidar_pcd']: 
+            print('cannot filter empty boxes when plotting both PCD')
+        elif bool_dict['plot_radar_pcd']:
+            chosen_pcd = radar_pcd
+        else:
+            chosen_pcd = lidar_pcd
+
+
+
+
     if is_test_set:
         vod_labels = None
         o3d_labels = None 
     else:
         vod_labels = FrameLabels(frame_data.get_labels()).labels_dict
-        o3d_labels = vod_to_o3d(vod_labels,vod_calib,is_combined=is_combined,is_label=True)
+        o3d_labels = vod_to_o3d(vod_labels,vod_calib,bool_dict,is_label=True,chosen_pcd=chosen_pcd)
             
 
     vod_preds = FrameLabels(frame_data.get_predictions()).labels_dict
-    o3d_predictions = vod_to_o3d(vod_preds,vod_calib,is_combined=is_combined,is_label=False)
+    o3d_predictions = vod_to_o3d(vod_preds,vod_calib,bool_dict,is_label=False,chosen_pcd=chosen_pcd)
     
+
+    # if filter_empty_lidar:
+    #     o3d_labels = filter_empty_boxes(o3d_labels,lidar_pcd)
+    #     o3d_predictions= filter_empty_boxes(o3d_predictions,lidar_pcd)
+
+    # elif filter_empty_radar:
+    #     o3d_labels = filter_empty_boxes(o3d_labels,radar_pcd)
+    #     o3d_predictions = filter_empty_boxes(o3d_predictions,radar_pcd)
+
 
     vis_dict = {
         'radar_pcd': [radar_pcd],
@@ -358,7 +433,7 @@ def get_visualization_data(kitti_locations,dt_path,frame_id,is_test_set,is_combi
         'o3d_predictions': o3d_predictions,
         'vod_labels': vod_labels,
         'o3d_labels': o3d_labels,
-        'frame_id': frame_ids[frame_id]
+        'frame_id': current_frame
     }
     return vis_dict
 
@@ -398,7 +473,7 @@ def vis_one_frame(
 
     if plot_radar_pcd:
         geometries += vis_dict['radar_pcd']
-        point_size = 3
+        point_size = 5
         name_str += 'Radar'
     if plot_lidar_pcd:
         geometries += vis_dict['lidar_pcd']
@@ -477,22 +552,22 @@ def vis_all_frames(
 
 # %%
 
-def do_vis(tag,frames,is_test_set,test_dict,vod_data_path,CAMERA_POS_PATH,bool_dict):
+def do_vis(tag,frames,test_dict,vod_data_path,CAMERA_POS_PATH,bool_dict):
         abs_path = P(__file__).parent.resolve()
         base_path = abs_path.parents[1]
         # CAMERA_POS_PATH = 'widecam.json'
-        output_name = tag+'_testset' if is_test_set else tag 
-        OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /   CAMERA_POS_PATH[:-5] / (output_name) 
+        output_name = tag+'_testset' if bool_dict['is_test_set'] else tag 
+        OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /   CAMERA_POS_PATH[:-5] / (output_name+bool_dict['extra_tag'])  
         print(f'IMAGES WILL BE SAVED TO DIRECTORY: {OUTPUT_IMG_PATH}')
 
         OUTPUT_IMG_PATH.mkdir(parents=True,exist_ok=True)
 
         detection_result_path = base_path / path_dict[tag]
 
-        dt_path = str(detection_result_path / 'result.pkl')    
-        test_dt_path = base_path / test_dict[tag] if is_test_set else base_path / path_dict[tag]
+        dt_path = detection_result_path if bool_dict['is_directory'] else str(detection_result_path / 'result.pkl') 
+        test_dt_path = base_path / test_dict[tag] if bool_dict['is_test_set'] else base_path / path_dict[tag]
 
-        vis_path = test_dt_path if is_test_set else dt_path
+        vis_path = test_dt_path if bool_dict['is_test_set'] else dt_path
 
         kitti_locations = get_kitti_locations(vod_data_path)
 
@@ -505,36 +580,57 @@ def do_vis(tag,frames,is_test_set,test_dict,vod_data_path,CAMERA_POS_PATH,bool_d
             vis_path,
             CAMERA_POS_PATH,
             OUTPUT_IMG_PATH,
-            plot_radar_pcd=bool_dict['plot_radar_pcd'],
-            plot_lidar_pcd=bool_dict['plot_lidar_pcd'],
-            plot_labels=bool_dict['plot_labels'],
-            plot_predictions=bool_dict['plot_predictions'],
             frame_ids=frames,
-            is_combined=bool_dict['is_combined'])
+            bool_dict = bool_dict)
         
 def vis_subset(
 kitti_locations,
     dt_path,
     CAMERA_POS_PATH,
     OUTPUT_IMG_PATH,
-    plot_radar_pcd,
-    plot_lidar_pcd,
-    plot_labels,
-    plot_predictions,
     frame_ids,
-    is_combined=False):
+    bool_dict):
 
-    
+
     for i in tqdm(range(len(frame_ids))):
-        vis_dict = get_visualization_data_true_frame(kitti_locations,dt_path,frame_ids[i],False,is_combined=is_combined)
+
+        vis_dict = get_visualization_data(
+            kitti_locations,
+            dt_path,
+            frame_ids[i],
+            bool_dict)
+
+        # if bool_dict['use_frame_str']:
+        #     vis_dict = get_visualization_data_true_frame(
+        #         kitti_locations,
+        #         dt_path,
+        #         frame_ids[i],
+        #         False,
+        #         is_combined=bool_dict['is_combined'],
+        #         is_directory=bool_dict['is_directory'],
+        #         draw_thick_boxes = bool_dict['DRAW_THICK_BOXES'],
+        #         filter_empty_lidar=bool_dict['filter_lidar'],
+        #         filter_empty_radar=bool_dict['filter_radar'])
+        # else:
+        #     vis_dict = get_visualization_data(
+        #         kitti_locations,
+        #         dt_path,
+        #         frame_ids[i],
+        #         bool_dict=bool_dict,
+        #         is_test_set=False,
+        #         is_combined=bool_dict['is_combined'],
+        #         is_directory=bool_dict['is_directory'],
+        #         draw_thick_boxes = bool_dict['DRAW_THICK_BOXES'],
+        #         filter_empty_lidar=bool_dict['filter_lidar'],
+        #         filter_empty_radar=bool_dict['filter_radar'])
         vis_one_frame(
             vis_dict = vis_dict,
             camera_pos_file=CAMERA_POS_PATH,
             output_name=OUTPUT_IMG_PATH,
-            plot_radar_pcd=plot_radar_pcd,
-            plot_lidar_pcd=plot_lidar_pcd,
-            plot_labels=plot_labels,
-            plot_predictions=plot_predictions)
+            plot_radar_pcd=bool_dict['plot_radar_pcd'],
+            plot_lidar_pcd=bool_dict['plot_lidar_pcd'],
+            plot_labels=bool_dict['plot_labels'],
+            plot_predictions=bool_dict['plot_predictions'])
 
 
 
@@ -748,24 +844,43 @@ def generate_comparison_frames():
     
     ###############################FRAMES####################################
     # frames = np.load('/root/gabriel/code/parent/CenterPoint-KITTI/tools/visual_utils/frames_to_generate.npy')
-    frames = ['4891','162','003','153','183','191','277','328','3593','04740','4878','05068','08433']
+    # frames = ['4891','162','003','153','183','191','277','328','3593','04740','4878','05068','08433']
+    # frames = list(range(189,370))+list(range(4878,4987))
+    # frames += list(range(8420,8480))
+    # frames += list(range(422,495))
+    frames = [461, 464, 489,5024, 4874]
+    # frames = list(range(300,320))
+    # frames += list(range(470,490))
+    # frames += list(range(5000,5030))
+    # frames = list(range(0,1296))
+
     frames = [str(f).zfill(5) for f in frames]
     ########################################################################
 
     
 
     #############################SETTINGS###################################
-    main_tag = 'CFAR_lidar_rcs'
+    # main_tag = 'CFAR_lidar_rcs'
+    main_tag = 'radar_rcsv'
+    # main_tag = 'radar_rcsv'
     vod_data_path = '/mnt/12T/public/view_of_delft'
-    CAMERA_POS_PATH = 'cam_960_480_angle_2.json'
-    is_test_set = False
-    draw_main_tag = False
+    # CAMERA_POS_PATH = 'cam_960_480_angle_2.json'
+    CAMERA_POS_PATH = 'camera_720_480.json'
+    
+    # is_test_set = False
+    draw_main_tag = True
     bool_dict = {
-        'plot_radar_pcd': False,
-        'plot_lidar_pcd': True,
+        'plot_radar_pcd': True,
+        'plot_lidar_pcd': False,
         'plot_labels': True,
         'plot_predictions': True,
+        'is_test_set': False,
         'is_combined': True,
+        'DRAW_THICK_BOXES': True,
+        'use_frame_str':True,
+        'is_directory':False,
+        'filter_empty':True,
+        'extra_tag': 'filtered'
     }
     """
     NOTE: setting is_combined = True overrides the class colors.
@@ -779,18 +894,126 @@ def generate_comparison_frames():
 
     res = get_resolution(CAMERA_POS_PATH)
     all_tags = lidar_baseline_tags+[main_tag] if draw_main_tag else lidar_baseline_tags
+    all_tags = [main_tag]
     for tag in all_tags:
         print(f'visualizing tag: {tag} with resolution {res[0]}x{res[1]}')        
         do_vis(
             tag,
             frames,
-            is_test_set,
             None,
             vod_data_path,
             CAMERA_POS_PATH,
             bool_dict)
     
 
+
+def concat_two_image(img1,img2,out_name):
+
+    
+    images = [Image.open(x) for x in [img1,img2]]
+
+    widths, heights = zip(*(i.size for i in images))
+    
+    total_width = sum(widths)
+    max_height = max(heights)
+
+    new_im = Image.new('RGB', (total_width, max_height))
+
+    x_offset = 0
+    for im in images:
+        new_im.paste(im, (x_offset,0))
+        x_offset += im.size[0]
+
+    new_im.save(f'{out_name}.png')   
+
+
+
+def concat_outputs(path1,path2):
+
+    frame_ids = sorted(glob(path1+"/*"))
+    frame_id2 = sorted(glob(path2+"/*"))
+
+
+    assert len(frame_ids)==len(frame_id2)
+    
+    for i in tqdm(range(len(frame_ids))):
+        parent_path = P(frame_ids[i]).parents[2]
+        frame_id = P(frame_ids[i]).stem
+        out_name = f'{str(parent_path)}/' + str(P(frame_ids[i]).parents[1].stem) + str(P(frame_id2[i]).parents[1].stem) + f'/{str(frame_id)}'
+        # print(parent_path,frame_id)
+        # print(out_name)
+        # print(frame_ids[i],frame_id2[i])
+        os.makedirs(f'{str(parent_path)}/' + str(P(frame_ids[i]).parents[1].stem) + str(P(frame_id2[i]).parents[1].stem),exist_ok=True)
+        concat_two_image(frame_ids[i],frame_id2[i],out_name)
+
+
+
+def create_video(image_path,save_path):
+
+
+
+    # test_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_zoomedv2/LidarPred'
+    # save_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_zoomedv2_LidarPred.mp4'
+    dt_imgs = sorted(glob(str(P(image_path)/'*.png')))
+    make_vid(dt_imgs, save_path, fps=10)
+
+
+def add_captions(image_path,save_path,caption1,caption2):
+    W, H = 1920,1080
+    img = Image.open(image_path)
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("cmunss.ttf", 64)
+    _, _, w, h = draw.textbbox((0, 0), caption1, font=font)
+    draw.text((((W-w)/4), ((H-h)*0.95)), caption1, font=font, fill=(255,255,255))
+    _, _, w2, h2 = draw.textbbox((0, 0), caption2, font=font)
+    draw.text((((W-w2)*0.75), ((H-h2)*0.95)), caption2, font=font, fill=(255,255,255))
+
+    img.save(save_path)
+
+
+def add_captions_all(file_path,caption1,caption2):
+
+
+    frame_ids = sorted(glob(file_path+"/*"))
+    save_path = file_path+"_captioned/"
+    os.makedirs(save_path,exist_ok=True)
+
+    for i in tqdm(range(len(frame_ids))):
+        # parent_path = P(frame_ids[i]).parents[2]
+        frame_id = P(frame_ids[i]).stem
+        
+        out_name = save_path + f'{frame_id}.png'
+        
+        W, H = 1920,1080
+        img = Image.open(frame_ids[i])
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.truetype("cmunss.ttf", 64)
+        _, _, w, h = draw.textbbox((0, 0), caption1, font=font)
+        draw.text((((W-w)/4), ((H-h)*0.95)), caption1, font=font, fill=(255,255,255))
+        _, _, w2, h2 = draw.textbbox((0, 0), caption2, font=font)
+        draw.text((((W-w2)*0.75), ((H-h2)*0.95)), caption2, font=font, fill=(255,255,255))
+        img.save(out_name)
+
+
+def selected():
+
+    path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_854_480_angle_2'
+    out_name = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_854_480_angle_2/selected'
+
+
+    all_tags = lidar_baseline_tags+['CFAR_lidar_rcs']
+
+    selected_frames = [277,162,4740]
+    selected_frames = [str(f).zfill(5) for f in selected_frames]
+    
+    for f in selected_frames:
+        for tag in all_tags:
+            src = path+f'/{tag}/LidarGTPred/{f}.png'
+            shutil.copyfile(src, out_name+f'/{tag}{f}.png')
+        if tag == 'CFAR_lidar_rcs':
+            src = path+f'/{tag}/LidarGT/{f}.png'
+            shutil.copyfile(src, out_name+f'/GT{f}.png')
+        
 
 #%%
 if __name__ == "__main__":
@@ -812,6 +1035,36 @@ if __name__ == "__main__":
     # RUN THESE COMMANDS FIRST
     # source py3env/bin/activate
     # export PYTHONPATH="${PYTHONPATH}:/root/gabriel/code/parent/CenterPoint-KITTI"
+    
+    # selected()
+
     generate_comparison_frames()
+
+    # add_captions(
+    #     image_path='/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/CFAR_radarpp_radar_rcsv/00189.png',
+    #     save_path='/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/CFAR_radarpp_radar_rcsv_captioned/00189.png',
+    #     caption1='Ours',
+    #     caption2='Pointpillar'
+    # )   
+    # add_captions_all(
+    #     file_path='/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/CFAR_lidar_rcspp_lidar',
+    #     caption1='Ours',
+    #     caption2='Pointpillar'
+    # )   
+    # concat_outputs(
+    #     path1 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/CFAR_radar/RadarGTPred',
+    #     path2 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/pp_radar_rcsv/RadarGTPred'
+    # )
+
+    # create_video(
+    #     image_path='/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/CFAR_lidar_rcspp_lidar_captioned',
+    #     save_path='/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/CFAR_lidar_rcspp_lidar_captioned.mp4'
+    # )
+
+    # create_video(
+    #     image_path='/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/CFAR_radarpp_radar_rcsv_captioned',
+    #     save_path='/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/camera_960_1080/CFAR_radarpp_radar_rcsv_captioned.mp4'
+    # )
+
 
 # %%
